@@ -18,7 +18,7 @@ export type Credentials = { email: string; password: string };
 // 3. Enable Google+ API or People API
 // 4. Create OAuth 2.0 credentials
 // 5. Add your redirect URI: snapevent://
-const GOOGLE_CLIENT_ID = '792659966432-g9jn55j8c4s3g85rg6rr6oqofglsi7hq.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID;
 
 /**
  * loginWithEmail
@@ -49,6 +49,13 @@ export async function signupWithEmail(_credentials: Credentials): Promise<void> 
 }
 
 /**
+ * Configuration constants
+ */
+const IP_ADDRESS = process.env.EXPO_PUBLIC_IP_ADDRESS || '10.37.96.184'; // Fallback IP address
+const SERVER_PORT = process.env.EXPO_PUBLIC_SERVER_PORT || '3000';
+const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL || `http://${IP_ADDRESS}.nip.io:${SERVER_PORT}`;
+
+/**
  * loginWithGoogle
  * - Initiates Google OAuth using the server's Passport.js authentication.
  * - Opens the server's Google OAuth endpoint in a web browser.
@@ -56,9 +63,6 @@ export async function signupWithEmail(_credentials: Credentials): Promise<void> 
  */
 export async function loginWithGoogle(): Promise<any> {
   try {
-    // Use nip.io magic DNS to make private IP work with Google OAuth
-    const SERVER_URL = 'http://10.37.103.26.nip.io:3000'; // Magic DNS for private IP
-    
     // Create the redirect URI that matches your app scheme
     const redirectUri = AuthSession.makeRedirectUri({
       scheme: 'snapevent',
