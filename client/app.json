@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "client",
-    "slug": "client",
+    "name": "SnapEvent",
+    "slug": "snapevent",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,7 +13,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.snapevent.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,13 +22,24 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.snapevent.app"
     },
     "plugins": [
-      ["expo-router"]
+      [
+        "expo-router"
+      ]
     ],
+    "scheme": "snapevent",
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "90022c1c-fff9-41cc-83bc-d0fe6132aea9"
+      }
+    },
+    "owner": "stealthhydrac"
   }
 }

@@ -3,7 +3,22 @@
 // intended server endpoints and client behavior. The server folder must
 // not be modified per instructions.
 
+import * as AuthSession from 'expo-auth-session';
+import * as WebBrowser from 'expo-web-browser';
+
+WebBrowser.maybeCompleteAuthSession();
+
 export type Credentials = { email: string; password: string };
+
+// Google OAuth configuration
+// TODO: Replace with your actual Google OAuth client ID from Google Cloud Console
+// Instructions:
+// 1. Go to https://console.cloud.google.com/
+// 2. Create a new project or select existing one
+// 3. Enable Google+ API or People API
+// 4. Create OAuth 2.0 credentials
+// 5. Add your redirect URI: snapevent://
+const GOOGLE_CLIENT_ID = '792659966432-g9jn55j8c4s3g85rg6rr6oqofglsi7hq.apps.googleusercontent.com';
 
 /**
  * loginWithEmail
@@ -35,15 +50,66 @@ export async function signupWithEmail(_credentials: Credentials): Promise<void> 
 
 /**
  * loginWithGoogle
- * - Initiates Google OAuth.
- * - On native: Use Google auth flow to obtain an id_token/access_token.
- * - Then POST token to server `/api/auth/google` for verification and session issuance.
- * - On success, store the returned session token.
+ * - Initiates Google OAuth using the server's Passport.js authentication.
+ * - Opens the server's Google OAuth endpoint in a web browser.
+ * - Handles the callback to extract the token from the redirect.
  */
-export async function loginWithGoogle(): Promise<void> {
-  // TODO: Implement client-side Google auth flow using expo-auth-session or similar.
-  // After obtaining Google credentials, exchange with your server:
-  // await fetch(`${API_BASE_URL}/api/auth/google`, { method: 'POST', body: JSON.stringify({ id_token }) })
+export async function loginWithGoogle(): Promise<any> {
+  try {
+    // Use nip.io magic DNS to make private IP work with Google OAuth
+    const SERVER_URL = 'http://10.37.96.184.nip.io:3000'; // Magic DNS for private IP
+    
+    // Create the redirect URI that matches your app scheme
+    const redirectUri = AuthSession.makeRedirectUri({
+      scheme: 'snapevent',
+      path: 'auth/callback'
+    });
+
+    console.log('Redirect URI:', redirectUri);
+
+    // Start the authentication session with your server
+    const authUrl = `${SERVER_URL}/auth/google?mobile=true`;
+    
+    console.log('Opening auth URL:', authUrl);
+
+    const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+
+    console.log('Auth result:', result);
+
+    if (result.type === 'success') {
+      const { url } = result;
+      const urlObj = new URL(url);
+      const token = urlObj.searchParams.get('token');
+      const userStr = urlObj.searchParams.get('user');
+      const error = urlObj.searchParams.get('error');
+
+      if (error) {
+        throw new Error(`Authentication failed: ${error}`);
+      }
+
+      if (token && userStr) {
+        const user = JSON.parse(decodeURIComponent(userStr));
+        
+        console.log('Google login successful:', user);
+        console.log('Token received:', token);
+        
+        // TODO: Store the token securely
+        // await SecureStore.setItemAsync('authToken', token);
+        // await SecureStore.setItemAsync('user', JSON.stringify(user));
+
+        return { user, token };
+      } else {
+        throw new Error('No token received from authentication');
+      }
+    } else if (result.type === 'cancel') {
+      throw new Error('Google login was cancelled');
+    } else {
+      throw new Error('Google login failed');
+    }
+  } catch (error) {
+    console.error('Google login error:', error);
+    throw error;
+  }
 }
 
 /**
@@ -54,5 +120,3 @@ export async function loginWithGoogle(): Promise<void> {
 export async function signout(): Promise<void> {
   // TODO: Clear local session and optionally notify server of logout.
 }
-
-

@@ -9,12 +9,16 @@ export default function LoginScreen() {
   const [error, setError] = React.useState<string | null>(null);
 
   const handleGoogleLogin = async () => {
+    console.log('Google login button pressed');
     setError(null);
     setLoading(true);
     try {
-      await loginWithGoogle();
+      console.log('Calling loginWithGoogle...');
+      const result = await loginWithGoogle();
+      console.log('Login result:', result);
       // TODO: Navigate to the app's authenticated area once session is stored.
     } catch (e: any) {
+      console.error('Google login error:', e);
       setError(e?.message ?? 'Google login failed');
     } finally {
       setLoading(false);
