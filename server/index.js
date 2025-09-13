@@ -15,6 +15,7 @@ const DynamoDBService = require('./services/dynamodb');
 const eventsRoutes = require('./routes/events');
 const usersRoutes = require('./routes/users');
 const authRoutes = require('./routes/auth');
+const directionsRoutes = require('./routes/directions');
 
 // Middleware
 app.use(cors({
@@ -43,6 +44,7 @@ app.use(passport.session());
 app.use('/auth', authRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/directions', directionsRoutes);
 
 // Basic route
 app.get('/', (req, res) => {
