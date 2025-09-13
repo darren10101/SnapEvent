@@ -219,26 +219,12 @@ export default function FriendsScreen() {
 			<View style={{ flex: 1 }}>
 				<MapView
 					style={{ flex: 1 }}
-					initialRegion={{
-						latitude: 37.7749,
-						longitude: -122.4194,
-						latitudeDelta: 0.0922,
-						longitudeDelta: 0.0421,
-					}}
+					
 					showsUserLocation={true}
 					showsMyLocationButton={true}
 				>
 					{/* Add some sample markers for friends */}
-					<Marker
-						coordinate={{ latitude: 37.7849, longitude: -122.4194 }}
-						title="Friend 1"
-						description="Sam Lee"
-					/>
-					<Marker
-						coordinate={{ latitude: 37.7649, longitude: -122.4094 }}
-						title="Friend 2"
-						description="Riley Chen"
-					/>
+					
 				</MapView>
 			</View>
 			<DraggableSheet>

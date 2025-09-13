@@ -15,6 +15,10 @@ export default function DraggableSheet({ children, collapsedHeight, topInset, co
 	const expandedTop = (topInset ?? (insets.top + 8));
 	const collapsedH = collapsedHeight ?? Math.floor(screenHeight * 0.55);
 	const maxTranslateY = Math.max(0, screenHeight - collapsedH); // 0 = expanded, maxTranslateY = collapsed
+	
+	// Add a third position - minimized (shows only the handle and a bit of content)
+	const minimizedTranslateY = maxTranslateY + 300; // 300px further down from collapsed
+	const absoluteMaxTranslateY = Math.min(minimizedTranslateY, screenHeight - expandedTop - 60); // Ensure at least 60px remains visible
 
 	const translateY = useRef(new Animated.Value(maxTranslateY)).current;
 	const lastSnap = useRef(maxTranslateY);
@@ -38,15 +42,40 @@ export default function DraggableSheet({ children, collapsedHeight, topInset, co
 					translateY.stopAnimation();
 				},
 				onPanResponderMove: (_evt, gesture) => {
-					const next = Math.min(Math.max(0, lastSnap.current + gesture.dy), maxTranslateY);
+					const next = Math.min(Math.max(0, lastSnap.current + gesture.dy), absoluteMaxTranslateY);
 					translateY.setValue(next);
 				},
 				onPanResponderRelease: (_evt, gesture) => {
-					const shouldExpand = gesture.vy < -0.3 || translateY.__getValue() < maxTranslateY / 2;
-					snapTo(shouldExpand ? 0 : maxTranslateY);
+					const currentPosition = lastSnap.current + gesture.dy;
+					
+					// Determine target position based on velocity and current position
+					let targetPosition: number;
+					
+					if (gesture.vy < -0.5) {
+						// Fast upward swipe - go to expanded
+						targetPosition = 0;
+					} else if (gesture.vy > 0.5) {
+						// Fast downward swipe - go to next position down
+						if (currentPosition < maxTranslateY * 0.7) {
+							targetPosition = maxTranslateY; // From expanded to collapsed
+						} else {
+							targetPosition = absoluteMaxTranslateY; // From collapsed to minimized
+						}
+					} else {
+						// Slow movement - snap to nearest position
+						if (currentPosition < maxTranslateY * 0.5) {
+							targetPosition = 0; // Expanded
+						} else if (currentPosition < (maxTranslateY + absoluteMaxTranslateY) * 0.5) {
+							targetPosition = maxTranslateY; // Collapsed
+						} else {
+							targetPosition = absoluteMaxTranslateY; // Minimized
+						}
+					}
+					
+					snapTo(targetPosition);
 				},
 			}),
-		[maxTranslateY]
+		[maxTranslateY, absoluteMaxTranslateY]
 	);
 
 	return (
@@ -72,7 +101,20 @@ export default function DraggableSheet({ children, collapsedHeight, topInset, co
 			]}
 		>
 			<View {...panResponder.panHandlers}>
-				<Pressable onPress={() => snapTo(0)} style={{ alignItems: "center", paddingVertical: 8 }}>
+				<Pressable 
+					onPress={() => {
+						// Cycle through positions: minimized -> collapsed -> expanded -> minimized
+						const currentPos = lastSnap.current;
+						if (currentPos >= absoluteMaxTranslateY * 0.9) {
+							snapTo(maxTranslateY); // From minimized to collapsed
+						} else if (currentPos >= maxTranslateY * 0.9) {
+							snapTo(0); // From collapsed to expanded
+						} else {
+							snapTo(absoluteMaxTranslateY); // From expanded to minimized
+						}
+					}} 
+					style={{ alignItems: "center", paddingVertical: 8 }}
+				>
 					<View style={{ width: 44, height: 5, borderRadius: 999, backgroundColor: "#E5E7EB" }} />
 				</Pressable>
 			</View>
