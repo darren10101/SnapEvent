@@ -575,4 +575,295 @@ router.get('/:googleId/friends', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/users/:googleId/friend-request
+ * Send a friend request to a user by email
+ */
+router.post('/:googleId/friend-request', authenticateToken, async (req, res) => {
+  try {
+    const { googleId } = req.params;
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email is required'
+      });
+    }
+
+    // Check if requesting user exists
+    const requestingUser = await usersDB.getItem({ id: googleId });
+    if (!requestingUser) {
+      return res.status(404).json({
+        success: false,
+        error: 'Requesting user not found'
+      });
+    }
+
+    // Find target user by email
+    const allUsers = await usersDB.scanTable();
+    const targetUser = allUsers.find(user => user.email === email);
+    
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        error: 'User with this email not found'
+      });
+    }
+
+    // Check if they're already friends
+    const currentFriends = targetUser.friends || [];
+    if (currentFriends.includes(googleId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'You are already friends with this user'
+      });
+    }
+
+    // Check if friend request already exists
+    const currentFriendRequests = targetUser.friendRequests || [];
+    const existingRequest = currentFriendRequests.find(req => req.from === googleId);
+    if (existingRequest) {
+      return res.status(400).json({
+        success: false,
+        error: 'Friend request already sent to this user'
+      });
+    }
+
+    // Add friend request to target user
+    const newFriendRequest = {
+      id: Math.random().toString(36).slice(2, 15),
+      from: googleId,
+      fromName: requestingUser.name,
+      fromEmail: requestingUser.email,
+      fromPicture: requestingUser.picture,
+      createdAt: new Date().toISOString(),
+      status: 'pending'
+    };
+
+    const updatedFriendRequests = [...currentFriendRequests, newFriendRequest];
+
+    // Add sent request to requesting user
+    const currentSentRequests = requestingUser.sentFriendRequests || [];
+    const newSentRequest = {
+      id: newFriendRequest.id, // Same ID to link them
+      to: targetUser.id,
+      toName: targetUser.name,
+      toEmail: targetUser.email,
+      toPicture: targetUser.picture,
+      createdAt: new Date().toISOString(),
+      status: 'pending'
+    };
+
+    const updatedSentRequests = [...currentSentRequests, newSentRequest];
+
+    // Update both users in parallel
+    await Promise.all([
+      // Update target user with received friend request
+      usersDB.updateItem(
+        { id: targetUser.id },
+        'SET friendRequests = :friendRequests',
+        { 
+          ':friendRequests': updatedFriendRequests
+        }
+      ),
+      // Update requesting user with sent friend request
+      usersDB.updateItem(
+        { id: googleId },
+        'SET sentFriendRequests = :sentFriendRequests',
+        { 
+          ':sentFriendRequests': updatedSentRequests
+        }
+      )
+    ]);
+
+    res.json({
+      success: true,
+      message: `Friend request sent to ${targetUser.name}`,
+      data: {
+        targetUser: {
+          id: targetUser.id,
+          name: targetUser.name,
+          email: targetUser.email
+        },
+        requestId: newFriendRequest.id
+      }
+    });
+  } catch (error) {
+    console.error('Error sending friend request:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to send friend request',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/users/:googleId/friend-requests
+ * Get friend requests for a user (both sent and received)
+ */
+router.get('/:googleId/friend-requests', authenticateToken, async (req, res) => {
+  try {
+    const { googleId } = req.params;
+
+    // Get user data
+    const user = await usersDB.getItem({ id: googleId });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    const receivedRequests = user.friendRequests || [];
+    const sentRequests = user.sentFriendRequests || [];
+
+    res.json({
+      success: true,
+      data: {
+        received: receivedRequests,
+        sent: sentRequests
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching friend requests:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch friend requests',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * PUT /api/users/:googleId/friend-requests/:requestId
+ * Accept or decline a friend request
+ */
+router.put('/:googleId/friend-requests/:requestId', authenticateToken, async (req, res) => {
+  try {
+    const { googleId, requestId } = req.params;
+    const { action } = req.body; // 'accept' or 'decline'
+
+    if (!['accept', 'decline'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Action must be either "accept" or "decline"'
+      });
+    }
+
+    // Get the user who is responding to the request
+    const user = await usersDB.getItem({ id: googleId });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    // Find the friend request
+    const friendRequests = user.friendRequests || [];
+    const requestIndex = friendRequests.findIndex(req => req.id === requestId);
+    
+    if (requestIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        error: 'Friend request not found'
+      });
+    }
+
+    const friendRequest = friendRequests[requestIndex];
+    const requestingUserId = friendRequest.from;
+
+    // Get the requesting user
+    const requestingUser = await usersDB.getItem({ id: requestingUserId });
+    if (!requestingUser) {
+      return res.status(404).json({
+        success: false,
+        error: 'Requesting user not found'
+      });
+    }
+
+    if (action === 'accept') {
+      // Add each user to the other's friends list
+      const currentUserFriends = user.friends || [];
+      const requestingUserFriends = requestingUser.friends || [];
+
+      const updatedCurrentUserFriends = [...new Set([...currentUserFriends, requestingUserId])];
+      const updatedRequestingUserFriends = [...new Set([...requestingUserFriends, googleId])];
+
+      // Remove the friend request from both users
+      const updatedFriendRequests = friendRequests.filter(req => req.id !== requestId);
+      const requestingUserSentRequests = requestingUser.sentFriendRequests || [];
+      const updatedSentRequests = requestingUserSentRequests.filter(req => req.id !== requestId);
+
+      // Update both users
+      await Promise.all([
+        // Update current user: add friend, remove received request
+        usersDB.updateItem(
+          { id: googleId },
+          'SET friends = :friends, friendRequests = :friendRequests',
+          { 
+            ':friends': updatedCurrentUserFriends,
+            ':friendRequests': updatedFriendRequests
+          }
+        ),
+        // Update requesting user: add friend, remove sent request
+        usersDB.updateItem(
+          { id: requestingUserId },
+          'SET friends = :friends, sentFriendRequests = :sentFriendRequests',
+          { 
+            ':friends': updatedRequestingUserFriends,
+            ':sentFriendRequests': updatedSentRequests
+          }
+        )
+      ]);
+
+      res.json({
+        success: true,
+        message: `You are now friends with ${friendRequest.fromName}`,
+        action: 'accepted'
+      });
+    } else {
+      // Decline: just remove the requests from both users
+      const updatedFriendRequests = friendRequests.filter(req => req.id !== requestId);
+      const requestingUserSentRequests = requestingUser.sentFriendRequests || [];
+      const updatedSentRequests = requestingUserSentRequests.filter(req => req.id !== requestId);
+
+      await Promise.all([
+        // Remove received request
+        usersDB.updateItem(
+          { id: googleId },
+          'SET friendRequests = :friendRequests',
+          { 
+            ':friendRequests': updatedFriendRequests
+          }
+        ),
+        // Remove sent request
+        usersDB.updateItem(
+          { id: requestingUserId },
+          'SET sentFriendRequests = :sentFriendRequests',
+          { 
+            ':sentFriendRequests': updatedSentRequests
+          }
+        )
+      ]);
+
+      res.json({
+        success: true,
+        message: `Friend request from ${friendRequest.fromName} declined`,
+        action: 'declined'
+      });
+    }
+  } catch (error) {
+    console.error('Error processing friend request:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process friend request',
+      message: error.message
+    });
+  }
+});
+
 module.exports = router;

@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, FlatList, Pressable } from "react-native";
+import { View, Text, TextInput, FlatList, Pressable, Alert } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useAuth } from "../contexts/AuthContext";
 
 type Friend = { id: string; name: string; username?: string };
 
@@ -17,6 +18,9 @@ type FriendPickerProps = {
 export default function FriendPicker({ visible, onClose, friends, invitedFriendIds, onToggleInvite, topOffset }: FriendPickerProps) {
 	const insets = useSafeAreaInsets();
 	const [friendQuery, setFriendQuery] = useState("");
+	const [emailInput, setEmailInput] = useState("");
+	const [isAddingFriend, setIsAddingFriend] = useState(false);
+	const { user, token } = useAuth();
 
 	if (!visible) return null;
 
@@ -25,6 +29,46 @@ export default function FriendPicker({ visible, onClose, friends, invitedFriendI
 		if (!q) return true;
 		return f.name.toLowerCase().includes(q) || (f.username?.toLowerCase().includes(q) ?? false);
 	});
+
+	const sendFriendRequest = async () => {
+		if (!emailInput.trim()) {
+			Alert.alert("Error", "Please enter an email address");
+			return;
+		}
+
+		if (!user || !token) {
+			Alert.alert("Error", "You must be logged in to send friend requests");
+			return;
+		}
+
+		setIsAddingFriend(true);
+		try {
+			const response = await fetch(`http://10.37.96.184:3000/api/users/${user.id}/friend-request`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					'Authorization': `Bearer ${token}`,
+				},
+				body: JSON.stringify({
+					email: emailInput.trim()
+				})
+			});
+
+			const data = await response.json();
+
+			if (data.success) {
+				Alert.alert("Success", data.message);
+				setEmailInput("");
+			} else {
+				Alert.alert("Error", data.error || "Failed to send friend request");
+			}
+		} catch (error) {
+			console.error("Error sending friend request:", error);
+			Alert.alert("Error", "Failed to send friend request. Please try again.");
+		} finally {
+			setIsAddingFriend(false);
+		}
+	};
 
 	return (
 		<>
@@ -38,7 +82,7 @@ export default function FriendPicker({ visible, onClose, friends, invitedFriendI
 					top: (topOffset ?? 60) + insets.top,
 					left: 48,
 					right: 48,
-					maxHeight: 360,
+					maxHeight: 480,
 					backgroundColor: "#fff",
 					borderRadius: 12,
 					padding: 12,
@@ -53,6 +97,43 @@ export default function FriendPicker({ visible, onClose, friends, invitedFriendI
 					<Ionicons name="people" size={18} color="#1A73E8" />
 					<Text style={{ marginLeft: 6, fontWeight: "700", color: "#1A73E8" }}>Invite friends</Text>
 				</View>
+				
+				{/* Add friend by email section */}
+				<View style={{ marginBottom: 12, padding: 12, backgroundColor: "#F0F9FF", borderRadius: 8 }}>
+					<Text style={{ fontSize: 14, fontWeight: "600", marginBottom: 8, color: "#1A73E8" }}>Add friend by email</Text>
+					<View style={{ flexDirection: "row", gap: 8 }}>
+						<TextInput
+							placeholder="Enter email address"
+							value={emailInput}
+							onChangeText={setEmailInput}
+							style={{ 
+								flex: 1, 
+								backgroundColor: "#fff", 
+								borderRadius: 6, 
+								paddingHorizontal: 10, 
+								paddingVertical: 8,
+								borderWidth: 1,
+								borderColor: "#E5E7EB"
+							}}
+							keyboardType="email-address"
+							autoCapitalize="none"
+						/>
+						<Pressable 
+							onPress={sendFriendRequest} 
+							disabled={isAddingFriend}
+							style={{ 
+								backgroundColor: isAddingFriend ? "#9CA3AF" : "#1A73E8", 
+								paddingHorizontal: 12, 
+								paddingVertical: 8, 
+								borderRadius: 6,
+								justifyContent: "center"
+							}}
+						>
+							<Ionicons name="add" size={16} color="#fff" />
+						</Pressable>
+					</View>
+				</View>
+
 				<View style={{ backgroundColor: "#F5F7FB", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 8 }}>
 					<TextInput
 						placeholder="Search friends"
@@ -79,6 +160,7 @@ export default function FriendPicker({ visible, onClose, friends, invitedFriendI
 						);
 					}}
 					contentContainerStyle={{ paddingBottom: 6 }}
+					style={{ maxHeight: 200 }}
 				/>
 				<View style={{ flexDirection: "row", justifyContent: "flex-end", marginTop: 8 }}>
 					<Pressable onPress={onClose} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: "#1A73E8" }}>

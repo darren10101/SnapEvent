@@ -2,11 +2,14 @@ import React from 'react';
 import { Image, KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
 import { Button, Text, useTheme } from 'react-native-paper';
 import { loginWithGoogle } from '../../lib/auth';
+import { useAuth } from '../../contexts/AuthContext';
+import { router } from 'expo-router';
 
 export default function LoginScreen() {
   const paperTheme = useTheme();
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const { login } = useAuth();
 
   const handleGoogleLogin = async () => {
     console.log('Google login button pressed');
@@ -16,7 +19,12 @@ export default function LoginScreen() {
       console.log('Calling loginWithGoogle...');
       const result = await loginWithGoogle();
       console.log('Login result:', result);
-      // TODO: Navigate to the app's authenticated area once session is stored.
+      
+      // Store the user and token in the auth context
+      await login(result.user, result.token);
+      
+      // Navigate to the dashboard
+      router.replace('/(dashboard)/home');
     } catch (e: any) {
       console.error('Google login error:', e);
       setError(e?.message ?? 'Google login failed');

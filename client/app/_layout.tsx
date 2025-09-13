@@ -3,6 +3,7 @@ import { Provider as PaperProvider } from 'react-native-paper';
 import { theme } from '../theme';
 import { useFonts, Montserrat_400Regular, Montserrat_700Bold } from '@expo-google-fonts/montserrat';
 import { View } from 'react-native';
+import { AuthProvider } from '../contexts/AuthContext';
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -14,9 +15,11 @@ export default function RootLayout() {
     return <View />;
   }
   return (
-    <PaperProvider theme={theme}>
-      <Stack screenOptions={{ headerShown: false }} />
-    </PaperProvider>
+    <AuthProvider>
+      <PaperProvider theme={theme}>
+        <Stack screenOptions={{ headerShown: false }} />
+      </PaperProvider>
+    </AuthProvider>
   );
 }
 
