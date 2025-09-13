@@ -9,7 +9,7 @@ const usersDB = new DynamoDBService(process.env.USERS_TABLE || 'snapevent-users'
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-  callbackURL: process.env.GOOGLE_CALLBACK_URL || 'http://10.37.96.184:3000/auth/google/callback'
+  callbackURL: process.env.GOOGLE_CALLBACK_URL || `http://${process.env.IP_ADDRESS}:3000/auth/google/callback`
 }, async (accessToken, refreshToken, profile, done) => {
   try {
     console.log('Google OAuth profile received:', {
