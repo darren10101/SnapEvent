@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator } from 'react-native-paper';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function AuthCallbackScreen() {
   const router = useRouter();
@@ -22,8 +23,23 @@ export default function AuthCallbackScreen() {
         console.log('Authentication successful:', userData);
         console.log('Token received:', token);
         
-        // Navigate to main page with user data as query params
-        router.replace(`/?token=${encodeURIComponent(token as string)}&userData=${encodeURIComponent(JSON.stringify(userData))}`);
+        // Store auth data in AsyncStorage
+        const storeAuthData = async () => {
+          try {
+            await AsyncStorage.setItem('authToken', token as string);
+            await AsyncStorage.setItem('userData', JSON.stringify(userData));
+            console.log('Auth data stored successfully in AsyncStorage');
+            
+            // Navigate to main page with user data
+            router.replace(`/?fromAuth=true`);
+          } catch (storeError) {
+            console.error('Error storing auth data:', storeError);
+            // Even if storage fails, navigate to main page with URL params as fallback
+            router.replace(`/?token=${encodeURIComponent(token as string)}&userData=${encodeURIComponent(JSON.stringify(userData))}`);
+          }
+        };
+        
+        storeAuthData();
         
       } catch (parseError) {
         console.error('Error parsing user data:', parseError);

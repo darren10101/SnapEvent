@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Alert } from 'react-native';
 import { Avatar, Button, Card } from 'react-native-paper';
 import { Redirect, useRouter, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface User {
   id: string;
@@ -13,24 +14,48 @@ interface User {
 export default function Index() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState<string | null>(null);
   const router = useRouter();
-  const { token, userData } = useLocalSearchParams();
+  const { token: urlToken, userData: urlUserData } = useLocalSearchParams();
 
   useEffect(() => {
-    // Check if we received user data from auth callback
-    if (token && userData) {
+    const loadAuthData = async () => {
       try {
-        const parsedUserData = typeof userData === 'string' ? JSON.parse(userData) : userData;
-        console.log('Received user data on main page:', parsedUserData);
-        setUser(parsedUserData);
+        // First check if we have stored auth data
+        const storedToken = await AsyncStorage.getItem('authToken');
+        const storedUserData = await AsyncStorage.getItem('userData');
+        
+        if (storedToken && storedUserData) {
+          // Use stored data
+          console.log('Loading auth data from AsyncStorage');
+          const parsedUser = JSON.parse(storedUserData);
+          setToken(storedToken);
+          setUser(parsedUser);
+          console.log('Loaded user from storage:', parsedUser);
+        } else if (urlToken && urlUserData) {
+          // Fallback to URL params (legacy support)
+          console.log('Loading auth data from URL params');
+          const parsedUser = typeof urlUserData === 'string' ? JSON.parse(urlUserData) : urlUserData;
+          setToken(urlToken as string);
+          setUser(parsedUser);
+          console.log('Loaded user from URL:', parsedUser);
+        } else {
+          // No auth data found, redirect to login
+          console.log('No auth data found, redirecting to login');
+          setLoading(false);
+          return;
+        }
       } catch (error) {
-        console.error('Error parsing user data on main page:', error);
+        console.error('Error loading auth data:', error);
+      } finally {
+        setLoading(false);
       }
-    }
-    setLoading(false);
-  }, [token, userData]);
+    };
 
-  const handleSignOut = () => {
+    loadAuthData();
+  }, [urlToken, urlUserData]);
+
+  const handleSignOut = async () => {
     Alert.alert(
       'Sign Out',
       'Are you sure you want to sign out?',
@@ -39,10 +64,24 @@ export default function Index() {
         { 
           text: 'Sign Out', 
           style: 'destructive',
-          onPress: () => {
-            // Clear auth data and redirect to login
-            setUser(null);
-            router.replace('/(auth)/login');
+          onPress: async () => {
+            try {
+              // Clear stored auth data
+              await AsyncStorage.removeItem('authToken');
+              await AsyncStorage.removeItem('userData');
+              console.log('Auth data cleared from storage');
+              
+              // Clear state and redirect to login
+              setUser(null);
+              setToken(null);
+              router.replace('/(auth)/login');
+            } catch (error) {
+              console.error('Error clearing auth data:', error);
+              // Still redirect even if clearing fails
+              setUser(null);
+              setToken(null);
+              router.replace('/(auth)/login');
+            }
           }
         }
       ]
