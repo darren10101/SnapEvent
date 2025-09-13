@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useEffect } from "react";
-import { View, Text, Pressable, TextInput, Alert, ScrollView, RefreshControl, Modal } from "react-native";
+import { View, Text, Pressable, TextInput, Alert, ScrollView, RefreshControl, Modal, Platform } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import MapView, { Marker } from "react-native-maps";
 import DraggableSheet from "../../components/DraggableSheet";
 import { useAuth } from "../../contexts/AuthContext";
 
@@ -215,9 +216,30 @@ export default function FriendsScreen() {
 
 	return (
 		<View style={{ flex: 1, paddingTop: insets.top + 8 }}>
-			<View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#E6FFFA" }}>
-				<Text style={{ color: "#10B981" }}>Friends map placeholder (Find My style)</Text>
-				<Text style={{ color: "#10B981", marginTop: 4 }}>Install react-native-maps to enable the map</Text>
+			<View style={{ flex: 1 }}>
+				<MapView
+					style={{ flex: 1 }}
+					initialRegion={{
+						latitude: 37.7749,
+						longitude: -122.4194,
+						latitudeDelta: 0.0922,
+						longitudeDelta: 0.0421,
+					}}
+					showsUserLocation={true}
+					showsMyLocationButton={true}
+				>
+					{/* Add some sample markers for friends */}
+					<Marker
+						coordinate={{ latitude: 37.7849, longitude: -122.4194 }}
+						title="Friend 1"
+						description="Sam Lee"
+					/>
+					<Marker
+						coordinate={{ latitude: 37.7649, longitude: -122.4094 }}
+						title="Friend 2"
+						description="Riley Chen"
+					/>
+				</MapView>
 			</View>
 			<DraggableSheet>
 				{/* Tab Navigation */}
