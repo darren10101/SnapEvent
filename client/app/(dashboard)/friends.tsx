@@ -429,7 +429,7 @@ export default function FriendsScreen() {
 						<>
 							<Text style={{ fontSize: 18, fontWeight: "700", marginBottom: 8 }}>
 								Friends {friends.filter(f => f.lat && f.lng).length > 0 && 
-									`(${friends.filter(f => f.lat && f.lng).length} on map)`
+									`(${friends.filter(f => f.lat && f.lng).length})`
 								}
 							</Text>
 							{isFriendsLoading ? (
@@ -506,7 +506,7 @@ export default function FriendsScreen() {
 				style={{ 
 					position: 'absolute',
 					bottom: insets.bottom - 20,
-					right: 20,
+					right: 24,
 					width: 56,
 					height: 56,
 					backgroundColor: "#10B981",
