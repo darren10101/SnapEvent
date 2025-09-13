@@ -27,7 +27,7 @@ export default function LoginScreen() {
         <View style={styles.logoWrap}>
           <Image source={require('../../assets/logo.png')} style={styles.logo} resizeMode="contain" />
         </View>
-        <Text variant="headlineMedium" style={[styles.title, { color: paperTheme.colors.onBackground }]}>Welcome</Text>
+        <Text variant="headlineMedium" style={[styles.title, { color: paperTheme.colors.onBackground, fontFamily: 'Montserrat_700Bold' }]}>SnapEvent</Text>
         {!!error && <Text style={styles.error}>{error}</Text>}
         <Button
           mode="contained"

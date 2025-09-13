@@ -25,6 +25,21 @@ export const theme: MD3Theme = {
     surfaceVariant: '#F2F4F7',
     onSurfaceVariant: '#575C66',
   },
+  fonts: {
+    ...MD3LightTheme.fonts,
+    bodyLarge: { ...MD3LightTheme.fonts.bodyLarge, fontFamily: 'Montserrat_400Regular' },
+    bodyMedium: { ...MD3LightTheme.fonts.bodyMedium, fontFamily: 'Montserrat_400Regular' },
+    bodySmall: { ...MD3LightTheme.fonts.bodySmall, fontFamily: 'Montserrat_400Regular' },
+    titleLarge: { ...MD3LightTheme.fonts.titleLarge, fontFamily: 'Montserrat_700Bold' },
+    titleMedium: { ...MD3LightTheme.fonts.titleMedium, fontFamily: 'Montserrat_700Bold' },
+    titleSmall: { ...MD3LightTheme.fonts.titleSmall, fontFamily: 'Montserrat_700Bold' },
+    headlineLarge: { ...MD3LightTheme.fonts.headlineLarge, fontFamily: 'Montserrat_700Bold' },
+    headlineMedium: { ...MD3LightTheme.fonts.headlineMedium, fontFamily: 'Montserrat_700Bold' },
+    headlineSmall: { ...MD3LightTheme.fonts.headlineSmall, fontFamily: 'Montserrat_700Bold' },
+    labelLarge: { ...MD3LightTheme.fonts.labelLarge, fontFamily: 'Montserrat_700Bold' },
+    labelMedium: { ...MD3LightTheme.fonts.labelMedium, fontFamily: 'Montserrat_700Bold' },
+    labelSmall: { ...MD3LightTheme.fonts.labelSmall, fontFamily: 'Montserrat_700Bold' },
+  },
 };
 
 // Complementary colors for custom usage in components (non-typed by Paper)
