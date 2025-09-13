@@ -8,6 +8,7 @@ export default function DashboardLayout() {
 			let icon: keyof typeof Ionicons.glyphMap = "home";
 			if (route.name === "events") icon = "calendar";
 			if (route.name === "friends") icon = "people";
+			if (route.name === "profile") icon = "person";
 			return <Ionicons name={icon} size={size} color={color} />;
 		},
 		tabBarActiveTintColor: "#1A73E8",
@@ -20,6 +21,7 @@ export default function DashboardLayout() {
 			<Tabs.Screen name="home" options={{ title: "Home" }} />
 			<Tabs.Screen name="events" options={{ title: "Events" }} />
 			<Tabs.Screen name="friends" options={{ title: "Friends" }} />
+			<Tabs.Screen name="profile" options={{ title: "Profile" }} />
 		</Tabs>
 	);
 }
