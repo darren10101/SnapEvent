@@ -57,7 +57,7 @@ export async function signupWithEmail(_credentials: Credentials): Promise<void> 
 export async function loginWithGoogle(): Promise<any> {
   try {
     // Use nip.io magic DNS to make private IP work with Google OAuth
-    const SERVER_URL = 'http://10.37.96.184.nip.io:3000'; // Magic DNS for private IP
+    const SERVER_URL = 'http://10.37.103.26.nip.io:3000'; // Magic DNS for private IP
     
     // Create the redirect URI that matches your app scheme
     const redirectUri = AuthSession.makeRedirectUri({

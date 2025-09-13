@@ -42,7 +42,7 @@ router.get('/google/callback',
       console.log('Auth callback - NODE_ENV:', process.env.NODE_ENV);
       
       // Redirect to our server's callback page which will then open the custom scheme
-      const serverUrl = 'http://10.37.96.184.nip.io:3000';
+      const serverUrl = 'http://10.37.103.26.nip.io:3000';
       console.log('Redirecting to server callback page with token:', token);
       
       res.redirect(`${serverUrl}/auth/mobile-callback?token=${token}&user=${encodeURIComponent(JSON.stringify({
@@ -54,7 +54,7 @@ router.get('/google/callback',
       
     } catch (error) {
       console.error('Error in auth callback:', error);
-      const serverUrl = 'http://10.37.96.184.nip.io:3000';
+      const serverUrl = 'http://10.37.103.26.nip.io:3000';
       res.redirect(`${serverUrl}/auth/mobile-callback?error=token_generation_failed`);
     }
   }
@@ -91,7 +91,7 @@ router.get('/mobile-callback', (req, res) => {
   } else if (token && user) {
     // Redirect to app with success
     const customSchemeUrl = `snapevent://auth/callback?token=${encodeURIComponent(token)}&user=${encodeURIComponent(user)}`;
-    const expoGoUrl = `exp://10.37.96.184:8081/--/auth/callback?token=${encodeURIComponent(token)}&user=${encodeURIComponent(user)}`;
+    const expoGoUrl = `exp://10.37.103.26:8081/--/auth/callback?token=${encodeURIComponent(token)}&user=${encodeURIComponent(user)}`;
     
     res.send(`
       <!DOCTYPE html>

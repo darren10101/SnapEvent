@@ -21,8 +21,8 @@ const directionsRoutes = require('./routes/directions');
 app.use(cors({
   origin: [
     process.env.CLIENT_URL || 'http://localhost:3000',
-    'http://10.37.96.184:8081', // Expo development server
-    'exp://10.37.96.184:8081'   // Expo scheme
+    'http://10.37.103.26:8081', // Expo development server
+    'exp://10.37.103.26:8081'   // Expo scheme
   ],
   credentials: true
 }));
@@ -155,5 +155,5 @@ app.use((err, req, res, next) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`Visit http://localhost:${PORT} to see the API`);
-  console.log(`Network access: http://10.37.96.184:${PORT}`);
+  console.log(`Network access: http://10.37.103.26:${PORT}`);
 });
