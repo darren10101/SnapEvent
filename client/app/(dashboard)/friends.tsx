@@ -1,12 +1,20 @@
 import React, { useState, useCallback, useEffect } from "react";
-import { View, Text, Pressable, TextInput, Alert, ScrollView, RefreshControl, Modal, Platform } from "react-native";
+import { View, Text, Pressable, TextInput, Alert, ScrollView, RefreshControl, Modal, Platform, Image } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MapView, { Marker } from "react-native-maps";
 import DraggableSheet from "../../components/DraggableSheet";
 import { useAuth } from "../../contexts/AuthContext";
 
-type FriendItem = { id: string; name: string; status: string };
+type FriendItem = { 
+	id: string; 
+	name: string; 
+	email: string;
+	picture?: string;
+	status?: string;
+	lat?: number;
+	lng?: number;
+};
 
 type FriendRequest = {
 	id: string;
@@ -27,20 +35,105 @@ type FriendRequestsData = {
 	sent: FriendRequest[];
 };
 
+// Custom Friend Marker Component
+const FriendMarker: React.FC<{ friend: FriendItem }> = ({ friend }) => {
+	if (friend.picture) {
+		return (
+			<View style={{
+				width: 50,
+				height: 50,
+				borderRadius: 25,
+				backgroundColor: '#fff',
+				borderWidth: 3,
+				borderColor: '#10B981',
+				overflow: 'hidden',
+				alignItems: 'center',
+				justifyContent: 'center',
+				elevation: 5,
+				shadowColor: '#000',
+				shadowOpacity: 0.3,
+				shadowRadius: 5,
+				shadowOffset: { width: 0, height: 2 }
+			}}>
+				<Image 
+					source={{ uri: friend.picture }} 
+					style={{ 
+						width: 44, 
+						height: 44, 
+						borderRadius: 22 
+					}} 
+				/>
+			</View>
+		);
+	} else {
+		return (
+			<View style={{
+				width: 50,
+				height: 50,
+				borderRadius: 25,
+				backgroundColor: '#10B981',
+				borderWidth: 3,
+				borderColor: '#fff',
+				alignItems: 'center',
+				justifyContent: 'center',
+				elevation: 5,
+				shadowColor: '#000',
+				shadowOpacity: 0.3,
+				shadowRadius: 5,
+				shadowOffset: { width: 0, height: 2 }
+			}}>
+				<Text style={{ 
+					fontSize: 18, 
+					fontWeight: "700", 
+					color: "#fff" 
+				}}>
+					{friend.name.charAt(0).toUpperCase()}
+				</Text>
+			</View>
+		);
+	}
+};
+
 export default function FriendsScreen() {
 	const insets = useSafeAreaInsets();
-	const [friends, setFriends] = useState<FriendItem[]>([
-		{ id: "a", name: "Sam Lee", status: "Online" },
-		{ id: "b", name: "Riley Chen", status: "Offline" },
-		{ id: "c", name: "Jordan Fox", status: "Online" },
-	]);
+	const [friends, setFriends] = useState<FriendItem[]>([]);
 	const [emailInput, setEmailInput] = useState("");
 	const [isAddingFriend, setIsAddingFriend] = useState(false);
 	const [showAddFriend, setShowAddFriend] = useState(false);
 	const [friendRequests, setFriendRequests] = useState<FriendRequestsData>({ received: [], sent: [] });
 	const [isLoading, setIsLoading] = useState(false);
+	const [isFriendsLoading, setIsFriendsLoading] = useState(false);
 	const [activeTab, setActiveTab] = useState<'friends' | 'received' | 'sent'>('friends');
+	const [mapRegion, setMapRegion] = useState({
+		latitude: 37.7749, // Default to San Francisco
+		longitude: -122.4194,
+		latitudeDelta: 0.0922,
+		longitudeDelta: 0.0421,
+	});
 	const { user, token } = useAuth();
+
+	const fetchFriends = useCallback(async () => {
+		if (!user || !token) return;
+		
+		setIsFriendsLoading(true);
+		try {
+			const response = await fetch(`http://10.37.96.184:3000/api/users/${user.id}/friends`, {
+				headers: {
+					'Authorization': `Bearer ${token}`,
+				},
+			});
+
+			const data = await response.json();
+			if (data.success) {
+				setFriends(data.data);
+				calculateMapRegion(data.data);
+			}
+		} catch (error) {
+			console.error("Error fetching friends:", error);
+		} finally {
+			setIsFriendsLoading(false);
+		}
+	}, [user, token]);
 
 	const fetchFriendRequests = useCallback(async () => {
 		if (!user || !token) return;
@@ -64,9 +157,36 @@ export default function FriendsScreen() {
 		}
 	}, [user, token]);
 
+	const calculateMapRegion = (friendsList: FriendItem[]) => {
+		const friendsWithLocation = friendsList.filter(f => f.lat && f.lng);
+		
+		if (friendsWithLocation.length === 0) {
+			return; // Keep default region
+		}
+
+		const latitudes = friendsWithLocation.map(f => f.lat!);
+		const longitudes = friendsWithLocation.map(f => f.lng!);
+		
+		const minLat = Math.min(...latitudes);
+		const maxLat = Math.max(...latitudes);
+		const minLng = Math.min(...longitudes);
+		const maxLng = Math.max(...longitudes);
+		
+		const latDelta = Math.max((maxLat - minLat) * 1.3, 0.01); // Add padding
+		const lngDelta = Math.max((maxLng - minLng) * 1.3, 0.01);
+		
+		setMapRegion({
+			latitude: (minLat + maxLat) / 2,
+			longitude: (minLng + maxLng) / 2,
+			latitudeDelta: latDelta,
+			longitudeDelta: lngDelta,
+		});
+	};
+
 	useEffect(() => {
 		fetchFriendRequests();
-	}, [fetchFriendRequests]);
+		fetchFriends();
+	}, [fetchFriendRequests, fetchFriends]);
 
 	const sendFriendRequest = async () => {
 		if (!emailInput.trim()) {
@@ -135,6 +255,10 @@ export default function FriendsScreen() {
 				Alert.alert("Success", data.message);
 				// Refresh friend requests
 				fetchFriendRequests();
+				// If request was accepted, also refresh friends list
+				if (action === 'accept') {
+					fetchFriends();
+				}
 			} else {
 				Alert.alert("Error", data.error || `Failed to ${action} friend request`);
 			}
@@ -219,12 +343,27 @@ export default function FriendsScreen() {
 			<View style={{ flex: 1 }}>
 				<MapView
 					style={{ flex: 1 }}
-					
+					initialRegion={mapRegion}
 					showsUserLocation={true}
 					showsMyLocationButton={true}
 				>
-					{/* Add some sample markers for friends */}
-					
+					{/* Display friends as markers */}
+					{friends
+						.filter(friend => friend.lat && friend.lng) // Only show friends with valid coordinates
+						.map((friend) => (
+							<Marker
+								key={friend.id}
+								coordinate={{
+									latitude: friend.lat!,
+									longitude: friend.lng!,
+								}}
+								title={friend.name}
+								description={`📧 ${friend.email}`}
+							>
+								<FriendMarker friend={friend} />
+							</Marker>
+						))
+					}
 				</MapView>
 			</View>
 			<DraggableSheet>
@@ -241,7 +380,7 @@ export default function FriendsScreen() {
 						}}
 					>
 						<Text style={{ fontWeight: activeTab === 'friends' ? '700' : '500', color: activeTab === 'friends' ? '#10B981' : '#666' }}>
-							Friends
+							Friends ({friends.filter(f => f.lat && f.lng).length})
 						</Text>
 					</Pressable>
 					<Pressable 
@@ -277,18 +416,71 @@ export default function FriendsScreen() {
 				<ScrollView 
 					style={{ maxHeight: 300 }}
 					refreshControl={
-						<RefreshControl refreshing={isLoading} onRefresh={fetchFriendRequests} />
+						<RefreshControl 
+							refreshing={isLoading || isFriendsLoading} 
+							onRefresh={() => {
+								fetchFriendRequests();
+								fetchFriends();
+							}} 
+						/>
 					}
 				>
 					{activeTab === 'friends' && (
 						<>
-							<Text style={{ fontSize: 18, fontWeight: "700", marginBottom: 8 }}>Friends</Text>
-							{friends.map((f) => (
-								<View key={f.id} style={{ paddingVertical: 10, borderBottomWidth: 1, borderColor: "#eee" }}>
-									<Text style={{ fontSize: 16, fontWeight: "600" }}>{f.name}</Text>
-									<Text style={{ color: "#666" }}>{f.status}</Text>
-								</View>
-							))}
+							<Text style={{ fontSize: 18, fontWeight: "700", marginBottom: 8 }}>
+								Friends {friends.filter(f => f.lat && f.lng).length > 0 && 
+									`(${friends.filter(f => f.lat && f.lng).length} on map)`
+								}
+							</Text>
+							{isFriendsLoading ? (
+								<Text style={{ color: "#666", textAlign: 'center', paddingVertical: 20 }}>Loading friends...</Text>
+							) : friends.length === 0 ? (
+								<Text style={{ color: "#666", textAlign: 'center', paddingVertical: 20 }}>No friends yet. Send friend requests to get started!</Text>
+							) : (
+								friends.map((f) => (
+									<View key={f.id} style={{ 
+										paddingVertical: 12, 
+										borderBottomWidth: 1, 
+										borderColor: "#eee",
+										flexDirection: 'row',
+										alignItems: 'center'
+									}}>
+										{f.picture ? (
+											<Image 
+												source={{ uri: f.picture }} 
+												style={{ 
+													width: 40, 
+													height: 40, 
+													borderRadius: 20, 
+													marginRight: 12 
+												}} 
+											/>
+										) : (
+											<View style={{ 
+												width: 40, 
+												height: 40, 
+												borderRadius: 20, 
+												backgroundColor: "#10B981", 
+												justifyContent: "center", 
+												alignItems: "center",
+												marginRight: 12
+											}}>
+												<Text style={{ 
+													fontSize: 16, 
+													fontWeight: "700", 
+													color: "#fff" 
+												}}>
+													{f.name.charAt(0).toUpperCase()}
+												</Text>
+											</View>
+										)}
+										<View style={{ flex: 1 }}>
+											<Text style={{ fontSize: 16, fontWeight: "600" }}>{f.name}</Text>
+											<Text style={{ color: "#666", fontSize: 14 }}>{f.email}</Text>
+										</View>
+									</View>
+								))
+							)}
 						</>
 					)}
 

@@ -14,7 +14,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.snapevent.app"
+      "bundleIdentifier": "com.snapevent.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "SnapEvent needs your location to help you connect with friends and attend events nearby."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -23,11 +26,21 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.snapevent.app"
+      "package": "com.snapevent.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
     },
     "plugins": [
       [
         "expo-router"
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "SnapEvent needs your location to help you connect with friends and attend events nearby."
+        }
       ]
     ],
     "scheme": "snapevent",
