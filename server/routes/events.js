@@ -29,6 +29,45 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * GET /api/events/user/:googleId
+ * Get all events for a specific user (created by or participating in)
+ */
+router.get('/user/:googleId', async (req, res) => {
+  try {
+    const { googleId } = req.params;
+
+    // Validate Google ID
+    if (typeof googleId !== 'string' || googleId.length < 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid Google ID'
+      });
+    }
+
+    // Get all events and filter by user involvement
+    const allEvents = await eventsDB.scanTable();
+    
+    const userEvents = allEvents.filter(event => 
+      event.createdBy === googleId || 
+      (event.participants && event.participants.includes(googleId))
+    );
+
+    res.json({
+      success: true,
+      data: userEvents,
+      count: userEvents.length
+    });
+  } catch (error) {
+    console.error('Error fetching user events:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch user events',
+      message: error.message
+    });
+  }
+});
+
+/**
  * GET /api/events/:id
  * Get a specific event by ID
  */
@@ -70,7 +109,7 @@ router.post('/', async (req, res) => {
     if (!name || !location || !start || !end || !createdBy) {
       return res.status(400).json({
         success: false,
-        error: 'Name, location, start, end, and createdBy are required'
+        error: 'Name, location, start, end, and createdBy (Google ID) are required'
       });
     }
 
@@ -79,6 +118,14 @@ router.post('/', async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'Location must include lat and lng coordinates'
+      });
+    }
+
+    // Validate that createdBy is a valid Google ID (basic check)
+    if (typeof createdBy !== 'string' || createdBy.length < 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'createdBy must be a valid Google ID'
       });
     }
 
@@ -93,9 +140,11 @@ router.post('/', async (req, res) => {
       },
       start,
       end,
-      createdBy,
-      participants: participants || [createdBy],
-      itineraries: {}
+      createdBy, // Google ID of creator
+      participants: participants || [createdBy], // Array of Google IDs
+      itineraries: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
     await eventsDB.putItem(newEvent);
@@ -134,10 +183,12 @@ router.put('/:id', async (req, res) => {
     }
 
     // Build update expression
-    let updateExpression = 'SET';
-    const expressionAttributeValues = {};
+    let updateExpression = 'SET updatedAt = :updatedAt';
+    const expressionAttributeValues = {
+      ':updatedAt': new Date().toISOString()
+    };
     const expressionAttributeNames = {};
-    const updateParts = [];
+    const updateParts = ['updatedAt = :updatedAt'];
 
     if (name) {
       updateParts.push('#name = :name');
@@ -166,19 +217,21 @@ router.put('/:id', async (req, res) => {
       expressionAttributeValues[':end'] = end;
     }
     
-    if (participants) {
+    if (participants && Array.isArray(participants)) {
+      // Validate that all participants are valid Google IDs
+      const invalidParticipants = participants.filter(p => typeof p !== 'string' || p.length < 10);
+      if (invalidParticipants.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'All participants must be valid Google IDs'
+        });
+      }
+      
       updateParts.push('participants = :participants');
       expressionAttributeValues[':participants'] = participants;
     }
 
-    if (updateParts.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'No valid fields to update'
-      });
-    }
-
-    updateExpression += ` ${updateParts.join(', ')}`;
+    updateExpression = `SET ${updateParts.join(', ')}`;
 
     const updatedAttributes = await eventsDB.updateItem(
       { id },
@@ -247,7 +300,16 @@ router.post('/:id/participants', async (req, res) => {
     if (!userIds || !Array.isArray(userIds)) {
       return res.status(400).json({
         success: false,
-        error: 'userIds must be an array'
+        error: 'userIds must be an array of Google IDs'
+      });
+    }
+
+    // Validate that all userIds are valid Google IDs
+    const invalidIds = userIds.filter(userId => typeof userId !== 'string' || userId.length < 10);
+    if (invalidIds.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'All userIds must be valid Google IDs'
       });
     }
 
@@ -266,8 +328,11 @@ router.post('/:id/participants', async (req, res) => {
 
     const updatedAttributes = await eventsDB.updateItem(
       { id },
-      'SET participants = :participants',
-      { ':participants': newParticipants }
+      'SET participants = :participants, updatedAt = :updatedAt',
+      { 
+        ':participants': newParticipants,
+        ':updatedAt': new Date().toISOString()
+      }
     );
 
     res.json({
@@ -286,12 +351,12 @@ router.post('/:id/participants', async (req, res) => {
 });
 
 /**
- * PUT /api/events/:id/itinerary/:userId
- * Set itinerary for a specific user
+ * PUT /api/events/:id/itinerary/:googleId
+ * Set itinerary for a specific user (identified by Google ID)
  */
-router.put('/:id/itinerary/:userId', async (req, res) => {
+router.put('/:id/itinerary/:googleId', async (req, res) => {
   try {
-    const { id, userId } = req.params;
+    const { id, googleId } = req.params;
     const { steps } = req.body;
 
     if (!steps || !Array.isArray(steps)) {
@@ -311,6 +376,14 @@ router.put('/:id/itinerary/:userId', async (req, res) => {
       }
     }
 
+    // Validate Google ID
+    if (typeof googleId !== 'string' || googleId.length < 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid Google ID'
+      });
+    }
+
     // Check if event exists
     const existingEvent = await eventsDB.getItem({ id });
     if (!existingEvent) {
@@ -323,13 +396,13 @@ router.put('/:id/itinerary/:userId', async (req, res) => {
     // Update the itinerary for the specific user
     const updatedAttributes = await eventsDB.updateItem(
       { id },
-      'SET itineraries.#userId = :userItinerary',
+      'SET itineraries.#googleId = :userItinerary, updatedAt = :updatedAt',
       { 
         ':userItinerary': { steps },
-        ':userId': userId
+        ':updatedAt': new Date().toISOString()
       },
       {
-        '#userId': userId
+        '#googleId': googleId
       }
     );
 
@@ -349,12 +422,20 @@ router.put('/:id/itinerary/:userId', async (req, res) => {
 });
 
 /**
- * GET /api/events/:id/itinerary/:userId
- * Get itinerary for a specific user
+ * GET /api/events/:id/itinerary/:googleId
+ * Get itinerary for a specific user (identified by Google ID)
  */
-router.get('/:id/itinerary/:userId', async (req, res) => {
+router.get('/:id/itinerary/:googleId', async (req, res) => {
   try {
-    const { id, userId } = req.params;
+    const { id, googleId } = req.params;
+
+    // Validate Google ID
+    if (typeof googleId !== 'string' || googleId.length < 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid Google ID'
+      });
+    }
 
     const event = await eventsDB.getItem({ id });
     
@@ -365,7 +446,7 @@ router.get('/:id/itinerary/:userId', async (req, res) => {
       });
     }
 
-    const userItinerary = event.itineraries && event.itineraries[userId];
+    const userItinerary = event.itineraries && event.itineraries[googleId];
     
     if (!userItinerary) {
       return res.status(404).json({

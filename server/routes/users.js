@@ -1,5 +1,6 @@
 const express = require('express');
 const DynamoDBService = require('../services/dynamodb');
+const { authenticateToken, requireOwnership, optionalAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -29,13 +30,13 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * GET /api/users/:id
- * Get a specific user by ID
+ * GET /api/users/:googleId
+ * Get a specific user by Google ID
  */
-router.get('/:id', async (req, res) => {
+router.get('/:googleId', async (req, res) => {
   try {
-    const { id } = req.params;
-    const user = await usersDB.getItem({ id });
+    const { googleId } = req.params;
+    const user = await usersDB.getItem({ id: googleId });
     
     if (!user) {
       return res.status(404).json({
@@ -59,30 +60,76 @@ router.get('/:id', async (req, res) => {
 });
 
 /**
- * POST /api/users
- * Create a new user
+ * GET /api/users/email/:email
+ * Get a user by email address (useful for Google Auth lookups)
  */
-router.post('/', async (req, res) => {
+router.get('/email/:email', async (req, res) => {
   try {
-    const { name, lat, lng, availability, friends } = req.body;
+    const { email } = req.params;
     
-    // Basic validation
-    if (!name || lat === undefined || lng === undefined) {
-      return res.status(400).json({
+    // Since we don't have a GSI on email yet, we'll scan the table
+    // In production, you should create a GSI on email for better performance
+    const users = await usersDB.scanTable('email = :email', { ':email': email }, 1);
+    
+    if (!users || users.length === 0) {
+      return res.status(404).json({
         success: false,
-        error: 'Name, lat, and lng are required'
+        error: 'User not found'
       });
     }
 
-    const userId = `u${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    res.json({
+      success: true,
+      data: users[0]
+    });
+  } catch (error) {
+    console.error('Error fetching user by email:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch user by email',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/users
+ * Create a new user (typically called after Google OAuth)
+ */
+router.post('/', async (req, res) => {
+  try {
+    const { googleId, email, name, picture, lat, lng, availability, friends } = req.body;
+    
+    // Basic validation
+    if (!googleId || !email || !name) {
+      return res.status(400).json({
+        success: false,
+        error: 'googleId, email, and name are required'
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await usersDB.getItem({ id: googleId });
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        error: 'User already exists',
+        data: existingUser
+      });
+    }
     
     const newUser = {
-      id: userId,
+      id: googleId, // Using Google ID as primary key
+      email,
       name,
-      lat: parseFloat(lat),
-      lng: parseFloat(lng),
+      picture: picture || null,
+      lat: lat !== undefined ? parseFloat(lat) : null,
+      lng: lng !== undefined ? parseFloat(lng) : null,
       availability: availability || [],
-      friends: friends || []
+      friends: friends || [],
+      authProvider: 'google',
+      createdAt: new Date().toISOString(),
+      lastLogin: new Date().toISOString()
     };
 
     await usersDB.putItem(newUser);
@@ -103,16 +150,16 @@ router.post('/', async (req, res) => {
 });
 
 /**
- * PUT /api/users/:id
+ * PUT /api/users/:googleId
  * Update an existing user
  */
-router.put('/:id', async (req, res) => {
+router.put('/:googleId', async (req, res) => {
   try {
-    const { id } = req.params;
-    const { name, lat, lng, availability, friends } = req.body;
+    const { googleId } = req.params;
+    const { name, picture, lat, lng, availability, friends } = req.body;
 
     // Check if user exists
-    const existingUser = await usersDB.getItem({ id });
+    const existingUser = await usersDB.getItem({ id: googleId });
     if (!existingUser) {
       return res.status(404).json({
         success: false,
@@ -121,15 +168,22 @@ router.put('/:id', async (req, res) => {
     }
 
     // Build update expression
-    let updateExpression = 'SET';
-    const expressionAttributeValues = {};
+    let updateExpression = 'SET lastLogin = :lastLogin';
+    const expressionAttributeValues = {
+      ':lastLogin': new Date().toISOString()
+    };
     const expressionAttributeNames = {};
-    const updateParts = [];
+    const updateParts = ['lastLogin = :lastLogin'];
 
     if (name) {
       updateParts.push('#name = :name');
       expressionAttributeNames['#name'] = 'name';
       expressionAttributeValues[':name'] = name;
+    }
+    
+    if (picture !== undefined) {
+      updateParts.push('picture = :picture');
+      expressionAttributeValues[':picture'] = picture;
     }
     
     if (lat !== undefined) {
@@ -152,17 +206,10 @@ router.put('/:id', async (req, res) => {
       expressionAttributeValues[':friends'] = friends;
     }
 
-    if (updateParts.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'No valid fields to update'
-      });
-    }
-
-    updateExpression += ` ${updateParts.join(', ')}`;
+    updateExpression = `SET ${updateParts.join(', ')}`;
 
     const updatedAttributes = await usersDB.updateItem(
-      { id },
+      { id: googleId },
       updateExpression,
       expressionAttributeValues,
       Object.keys(expressionAttributeNames).length > 0 ? expressionAttributeNames : undefined
@@ -184,15 +231,15 @@ router.put('/:id', async (req, res) => {
 });
 
 /**
- * DELETE /api/users/:id
+ * DELETE /api/users/:googleId
  * Delete a user
  */
-router.delete('/:id', async (req, res) => {
+router.delete('/:googleId', async (req, res) => {
   try {
-    const { id } = req.params;
+    const { googleId } = req.params;
 
     // Check if user exists
-    const existingUser = await usersDB.getItem({ id });
+    const existingUser = await usersDB.getItem({ id: googleId });
     if (!existingUser) {
       return res.status(404).json({
         success: false,
@@ -200,7 +247,7 @@ router.delete('/:id', async (req, res) => {
       });
     }
 
-    await usersDB.deleteItem({ id });
+    await usersDB.deleteItem({ id: googleId });
 
     res.json({
       success: true,
@@ -217,12 +264,12 @@ router.delete('/:id', async (req, res) => {
 });
 
 /**
- * PUT /api/users/:id/location
- * Update user's current location
+ * PUT /api/users/:googleId/location
+ * Update user's current location (requires authentication and ownership)
  */
-router.put('/:id/location', async (req, res) => {
+router.put('/:googleId/location', authenticateToken, requireOwnership, async (req, res) => {
   try {
-    const { id } = req.params;
+    const { googleId } = req.params;
     const { lat, lng } = req.body;
 
     if (lat === undefined || lng === undefined) {
@@ -233,7 +280,7 @@ router.put('/:id/location', async (req, res) => {
     }
 
     // Check if user exists
-    const existingUser = await usersDB.getItem({ id });
+    const existingUser = await usersDB.getItem({ id: googleId });
     if (!existingUser) {
       return res.status(404).json({
         success: false,
@@ -242,11 +289,12 @@ router.put('/:id/location', async (req, res) => {
     }
 
     const updatedAttributes = await usersDB.updateItem(
-      { id },
-      'SET lat = :lat, lng = :lng',
+      { id: googleId },
+      'SET lat = :lat, lng = :lng, lastLogin = :lastLogin',
       { 
         ':lat': parseFloat(lat),
-        ':lng': parseFloat(lng)
+        ':lng': parseFloat(lng),
+        ':lastLogin': new Date().toISOString()
       }
     );
 
@@ -266,12 +314,12 @@ router.put('/:id/location', async (req, res) => {
 });
 
 /**
- * POST /api/users/:id/availability
- * Add availability window for a user
+ * POST /api/users/:googleId/availability
+ * Add availability window for a user (requires authentication and ownership)
  */
-router.post('/:id/availability', async (req, res) => {
+router.post('/:googleId/availability', authenticateToken, requireOwnership, async (req, res) => {
   try {
-    const { id } = req.params;
+    const { googleId } = req.params;
     const { start, end, location } = req.body;
 
     if (!start || !end || !location || !location.lat || !location.lng) {
@@ -282,7 +330,7 @@ router.post('/:id/availability', async (req, res) => {
     }
 
     // Check if user exists
-    const existingUser = await usersDB.getItem({ id });
+    const existingUser = await usersDB.getItem({ id: googleId });
     if (!existingUser) {
       return res.status(404).json({
         success: false,
@@ -304,9 +352,12 @@ router.post('/:id/availability', async (req, res) => {
     const updatedAvailability = [...currentAvailability, newAvailability];
 
     const updatedAttributes = await usersDB.updateItem(
-      { id },
-      'SET availability = :availability',
-      { ':availability': updatedAvailability }
+      { id: googleId },
+      'SET availability = :availability, lastLogin = :lastLogin',
+      { 
+        ':availability': updatedAvailability,
+        ':lastLogin': new Date().toISOString()
+      }
     );
 
     res.json({
@@ -325,16 +376,16 @@ router.post('/:id/availability', async (req, res) => {
 });
 
 /**
- * DELETE /api/users/:id/availability/:index
+ * DELETE /api/users/:googleId/availability/:index
  * Remove specific availability window by index
  */
-router.delete('/:id/availability/:index', async (req, res) => {
+router.delete('/:googleId/availability/:index', async (req, res) => {
   try {
-    const { id, index } = req.params;
+    const { googleId, index } = req.params;
     const availabilityIndex = parseInt(index);
 
     // Check if user exists
-    const existingUser = await usersDB.getItem({ id });
+    const existingUser = await usersDB.getItem({ id: googleId });
     if (!existingUser) {
       return res.status(404).json({
         success: false,
@@ -355,9 +406,12 @@ router.delete('/:id/availability/:index', async (req, res) => {
     const updatedAvailability = currentAvailability.filter((_, i) => i !== availabilityIndex);
 
     const updatedAttributes = await usersDB.updateItem(
-      { id },
-      'SET availability = :availability',
-      { ':availability': updatedAvailability }
+      { id: googleId },
+      'SET availability = :availability, lastLogin = :lastLogin',
+      { 
+        ':availability': updatedAvailability,
+        ':lastLogin': new Date().toISOString()
+      }
     );
 
     res.json({
@@ -376,23 +430,23 @@ router.delete('/:id/availability/:index', async (req, res) => {
 });
 
 /**
- * POST /api/users/:id/friends
+ * POST /api/users/:googleId/friends
  * Add friends to a user
  */
-router.post('/:id/friends', async (req, res) => {
+router.post('/:googleId/friends', async (req, res) => {
   try {
-    const { id } = req.params;
+    const { googleId } = req.params;
     const { friendIds } = req.body;
 
     if (!friendIds || !Array.isArray(friendIds)) {
       return res.status(400).json({
         success: false,
-        error: 'friendIds must be an array'
+        error: 'friendIds must be an array of Google IDs'
       });
     }
 
     // Check if user exists
-    const existingUser = await usersDB.getItem({ id });
+    const existingUser = await usersDB.getItem({ id: googleId });
     if (!existingUser) {
       return res.status(404).json({
         success: false,
@@ -405,9 +459,12 @@ router.post('/:id/friends', async (req, res) => {
     const newFriends = [...new Set([...currentFriends, ...friendIds])];
 
     const updatedAttributes = await usersDB.updateItem(
-      { id },
-      'SET friends = :friends',
-      { ':friends': newFriends }
+      { id: googleId },
+      'SET friends = :friends, lastLogin = :lastLogin',
+      { 
+        ':friends': newFriends,
+        ':lastLogin': new Date().toISOString()
+      }
     );
 
     res.json({
@@ -426,15 +483,15 @@ router.post('/:id/friends', async (req, res) => {
 });
 
 /**
- * DELETE /api/users/:id/friends/:friendId
+ * DELETE /api/users/:googleId/friends/:friendGoogleId
  * Remove a friend from user's friends list
  */
-router.delete('/:id/friends/:friendId', async (req, res) => {
+router.delete('/:googleId/friends/:friendGoogleId', async (req, res) => {
   try {
-    const { id, friendId } = req.params;
+    const { googleId, friendGoogleId } = req.params;
 
     // Check if user exists
-    const existingUser = await usersDB.getItem({ id });
+    const existingUser = await usersDB.getItem({ id: googleId });
     if (!existingUser) {
       return res.status(404).json({
         success: false,
@@ -443,12 +500,15 @@ router.delete('/:id/friends/:friendId', async (req, res) => {
     }
 
     const currentFriends = existingUser.friends || [];
-    const updatedFriends = currentFriends.filter(fId => fId !== friendId);
+    const updatedFriends = currentFriends.filter(fId => fId !== friendGoogleId);
 
     const updatedAttributes = await usersDB.updateItem(
-      { id },
-      'SET friends = :friends',
-      { ':friends': updatedFriends }
+      { id: googleId },
+      'SET friends = :friends, lastLogin = :lastLogin',
+      { 
+        ':friends': updatedFriends,
+        ':lastLogin': new Date().toISOString()
+      }
     );
 
     res.json({
@@ -467,15 +527,15 @@ router.delete('/:id/friends/:friendId', async (req, res) => {
 });
 
 /**
- * GET /api/users/:id/friends
+ * GET /api/users/:googleId/friends
  * Get user's friends with their details
  */
-router.get('/:id/friends', async (req, res) => {
+router.get('/:googleId/friends', async (req, res) => {
   try {
-    const { id } = req.params;
+    const { googleId } = req.params;
 
     // Check if user exists
-    const existingUser = await usersDB.getItem({ id });
+    const existingUser = await usersDB.getItem({ id: googleId });
     if (!existingUser) {
       return res.status(404).json({
         success: false,

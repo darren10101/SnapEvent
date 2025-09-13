@@ -1,6 +1,9 @@
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
+const session = require('express-session');
+const passport = require('./config/passport');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,13 +14,33 @@ const DynamoDBService = require('./services/dynamodb');
 // Import routes
 const eventsRoutes = require('./routes/events');
 const usersRoutes = require('./routes/users');
+const authRoutes = require('./routes/auth');
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Session configuration for Passport
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-session-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
+
 // Routes
+app.use('/auth', authRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/users', usersRoutes);
 

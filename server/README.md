@@ -88,25 +88,27 @@ The server will start on port 3000 by default. You can access it at `http://loca
 ### Events API
 - `GET /api/events` - Get all events
 - `GET /api/events/:id` - Get a specific event by ID
+- `GET /api/events/user/:googleId` - Get all events for a specific user
 - `POST /api/events` - Create a new event
 - `PUT /api/events/:id` - Update an existing event
 - `DELETE /api/events/:id` - Delete an event
 - `POST /api/events/:id/participants` - Add participants to an event
-- `PUT /api/events/:id/itinerary/:userId` - Set itinerary for a specific user
-- `GET /api/events/:id/itinerary/:userId` - Get itinerary for a specific user
+- `PUT /api/events/:id/itinerary/:googleId` - Set itinerary for a specific user
+- `GET /api/events/:id/itinerary/:googleId` - Get itinerary for a specific user
 
 ### Users API
 - `GET /api/users` - Get all users
-- `GET /api/users/:id` - Get a specific user by ID
-- `POST /api/users` - Create a new user
-- `PUT /api/users/:id` - Update an existing user
-- `DELETE /api/users/:id` - Delete a user
-- `PUT /api/users/:id/location` - Update user's current location
-- `POST /api/users/:id/availability` - Add availability window for a user
-- `DELETE /api/users/:id/availability/:index` - Remove specific availability window
-- `POST /api/users/:id/friends` - Add friends to a user
-- `DELETE /api/users/:id/friends/:friendId` - Remove a friend from user's friends list
-- `GET /api/users/:id/friends` - Get user's friends with their details
+- `GET /api/users/:googleId` - Get a specific user by Google ID
+- `GET /api/users/email/:email` - Get a user by email address
+- `POST /api/users` - Create a new user (typically after Google OAuth)
+- `PUT /api/users/:googleId` - Update an existing user
+- `DELETE /api/users/:googleId` - Delete a user
+- `PUT /api/users/:googleId/location` - Update user's current location
+- `POST /api/users/:googleId/availability` - Add availability window for a user
+- `DELETE /api/users/:googleId/availability/:index` - Remove specific availability window
+- `POST /api/users/:googleId/friends` - Add friends to a user
+- `DELETE /api/users/:googleId/friends/:friendGoogleId` - Remove a friend from user's friends list
+- `GET /api/users/:googleId/friends` - Get user's friends with their details
 
 ### Event Data Structure
 ```json
@@ -119,10 +121,10 @@ The server will start on port 3000 by default. You can access it at `http://loca
   },
   "start": "2025-09-12T19:00:00Z",
   "end": "2025-09-12T21:00:00Z",
-  "createdBy": "u1",
-  "participants": ["u1", "u2"],
+  "createdBy": "google_user_123456789",
+  "participants": ["google_user_123456789", "google_user_987654321"],
   "itineraries": {
-    "u1": {
+    "google_user_123456789": {
       "steps": [
         {
           "mode": "walk",
@@ -143,15 +145,19 @@ The server will start on port 3000 by default. You can access it at `http://loca
         }
       ]
     }
-  }
+  },
+  "createdAt": "2025-09-13T10:30:00.000Z",
+  "updatedAt": "2025-09-13T10:30:00.000Z"
 }
 ```
 
-### User Data Structure
+### User Data Structure (Google Auth)
 ```json
 {
-  "id": "u1234567890_abc123",
-  "name": "Alice",
+  "id": "google_user_123456789",
+  "email": "alice@gmail.com",
+  "name": "Alice Johnson",
+  "picture": "https://lh3.googleusercontent.com/a/profile_pic_url",
   "lat": 43.6532,
   "lng": -79.3832,
   "availability": [
@@ -164,7 +170,10 @@ The server will start on port 3000 by default. You can access it at `http://loca
       }
     }
   ],
-  "friends": ["u2", "u3"]
+  "friends": ["google_user_987654321", "google_user_555666777"],
+  "authProvider": "google",
+  "createdAt": "2025-09-13T08:15:00.000Z",
+  "lastLogin": "2025-09-13T15:45:00.000Z"
 }
 ```
 
