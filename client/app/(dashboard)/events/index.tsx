@@ -163,7 +163,14 @@ export default function EventsScreen() {
 					start: eventData.startDate.toISOString(),
 					end: eventData.endDate.toISOString(),
 					createdBy: user.id,
-					participants: [user.id, ...eventData.invitedFriends]
+					participants: [user.id, ...eventData.invitedFriends],
+					startingLocations: eventData.startingLocation ? {
+						[user.id]: {
+							lat: eventData.startingLocation.lat,
+							lng: eventData.startingLocation.lng,
+							description: eventData.startingLocation.description || ''
+						}
+					} : {}
 				})
 			});
 

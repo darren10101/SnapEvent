@@ -15,6 +15,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useAuth } from '../contexts/AuthContext';
 import EventSchedule from './EventSchedule';
+import DepartureLocationMap from './DepartureLocationMap';
 
 type EventItem = {
   id: string;
@@ -31,6 +32,13 @@ type EventItem = {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  startingLocations?: {
+    [userId: string]: {
+      lat: number;
+      lng: number;
+      description?: string;
+    };
+  };
 };
 
 type Friend = {
@@ -75,6 +83,9 @@ export default function EventEditModal({
   const [startPickerMode, setStartPickerMode] = useState<"date" | "time">("date");
   const [endPickerMode, setEndPickerMode] = useState<"date" | "time">("date");
   const [invitedFriends, setInvitedFriends] = useState<Set<string>>(new Set());
+  const [userStartingLocation, setUserStartingLocation] = useState<{ lat: number; lng: number; description?: string } | null>(null);
+  const [showDepartureMap, setShowDepartureMap] = useState(false);
+  const [scheduleRefreshKey, setScheduleRefreshKey] = useState(0);
 
   // Pre-fill form when event changes
   useEffect(() => {
@@ -87,8 +98,15 @@ export default function EventEditModal({
       // Set invited friends (exclude the creator)
       const invited = event.participants.filter(id => id !== event.createdBy);
       setInvitedFriends(new Set(invited));
+
+      // Load user's starting location if it exists
+      if (user && event.startingLocations && event.startingLocations[user.id]) {
+        setUserStartingLocation(event.startingLocations[user.id]);
+      } else {
+        setUserStartingLocation(null);
+      }
     }
-  }, [event]);
+  }, [event, user]);
 
   const resetForm = () => {
     setTitle("");
@@ -98,6 +116,8 @@ export default function EventEditModal({
     setShowStartPicker(false);
     setShowEndPicker(false);
     setInvitedFriends(new Set());
+    setUserStartingLocation(null);
+    setShowDepartureMap(false);
   };
 
   const toggleFriendInvite = (friendId: string) => {
@@ -115,6 +135,73 @@ export default function EventEditModal({
   const handleClose = () => {
     resetForm();
     onClose();
+  };
+
+  const saveUserStartingLocation = async (location: { lat: number; lng: number; description?: string }) => {
+    if (!event || !user || !token) return;
+
+    try {
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_API_URL}/api/events/${event.id}/starting-location/${user.id}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            lat: location.lat,
+            lng: location.lng,
+            description: location.description || ''
+          })
+        }
+      );
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setUserStartingLocation(location);
+        setShowDepartureMap(false);
+        setScheduleRefreshKey(prev => prev + 1); // Force refresh of travel schedules
+        Alert.alert('Success', 'Your starting location has been saved!');
+      } else {
+        console.error('Failed to save starting location:', result.error);
+        Alert.alert('Error', result.error || 'Failed to save starting location');
+      }
+    } catch (error) {
+      console.error('Error saving starting location:', error);
+      Alert.alert('Error', 'Failed to save starting location. Please try again.');
+    }
+  };
+
+  const removeUserStartingLocation = async () => {
+    if (!event || !user || !token) return;
+
+    try {
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_API_URL}/api/events/${event.id}/starting-location/${user.id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setUserStartingLocation(null);
+        setScheduleRefreshKey(prev => prev + 1); // Force refresh of travel schedules
+        Alert.alert('Success', 'Your starting location has been removed!');
+      } else {
+        console.error('Failed to remove starting location:', result.error);
+        Alert.alert('Error', result.error || 'Failed to remove starting location');
+      }
+    } catch (error) {
+      console.error('Error removing starting location:', error);
+      Alert.alert('Error', 'Failed to remove starting location. Please try again.');
+    }
   };
 
   const handleSave = () => {
@@ -372,6 +459,95 @@ export default function EventEditModal({
             </View>
           </View>
 
+          {/* Your Starting Location */}
+          <View style={{ marginBottom: 24 }}>
+            <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 8 }}>
+              Your Starting Location (Optional)
+            </Text>
+            <Text style={{ fontSize: 14, color: "#6B7280", marginBottom: 8 }}>
+              Select where you will start your journey from. Other participants will use their own locations.
+            </Text>
+            
+            {!showDepartureMap ? (
+              <>
+                {userStartingLocation ? (
+                  <View
+                    style={{
+                      backgroundColor: "#F3F4F6",
+                      padding: 16,
+                      borderRadius: 12,
+                      flexDirection: "row",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Ionicons name="location" size={20} color="#10B981" />
+                    <View style={{ marginLeft: 12, flex: 1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: "500" }}>
+                        {userStartingLocation.description || `${userStartingLocation.lat.toFixed(4)}, ${userStartingLocation.lng.toFixed(4)}`}
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={removeUserStartingLocation}
+                      hitSlop={8}
+                      style={{ padding: 4, marginRight: 8 }}
+                    >
+                      <Ionicons name="close-circle" size={24} color="#6B7280" />
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setShowDepartureMap(true)}
+                      hitSlop={8}
+                      style={{ padding: 4 }}
+                    >
+                      <Ionicons name="pencil" size={20} color="#6B7280" />
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => setShowDepartureMap(true)}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: "#D1D5DB",
+                      borderRadius: 8,
+                      padding: 12,
+                      backgroundColor: "#fff",
+                      flexDirection: "row",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Ionicons name="add-circle-outline" size={20} color="#6B7280" />
+                    <Text style={{ marginLeft: 8, fontSize: 16, color: "#6B7280" }}>
+                      Select Your Starting Location
+                    </Text>
+                  </Pressable>
+                )}
+              </>
+            ) : (
+              <View style={{ marginBottom: 16 }}>
+                <DepartureLocationMap
+                  selectedLocation={userStartingLocation}
+                  onLocationSelected={saveUserStartingLocation}
+                  onLocationCleared={() => {
+                    setUserStartingLocation(null);
+                    setShowDepartureMap(false);
+                  }}
+                  height={300}
+                />
+                <Pressable
+                  onPress={() => setShowDepartureMap(false)}
+                  style={{
+                    marginTop: 8,
+                    padding: 12,
+                    backgroundColor: "#F3F4F6",
+                    borderRadius: 8,
+                    alignItems: "center",
+                  }}
+                >
+                  <Text style={{ fontSize: 16, color: "#6B7280" }}>Cancel</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+
           {/* Participants */}
           <View style={{ marginBottom: 24 }}>
             <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 8 }}>
@@ -501,6 +677,7 @@ export default function EventEditModal({
           {event && (
             <View style={{ marginBottom: 24 }}>
               <EventSchedule
+                key={scheduleRefreshKey} // Force refresh when starting location changes
                 eventId={event.id}
                 eventLocation={event.location}
                 eventStart={startDate.toISOString()}
@@ -517,6 +694,9 @@ export default function EventEditModal({
                 ]}
                 token={token || undefined}
                 isEditing={true}
+                eventData={{
+                  startingLocations: event.startingLocations || {}
+                }}
               />
             </View>
           )}

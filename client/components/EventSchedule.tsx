@@ -86,7 +86,16 @@ interface EventScheduleProps {
   eventEnd: string;
   token?: string;
   isEditing?: boolean; // Add prop to know if event is being edited
-  startingLocation?: { lat: number; lng: number }; // Optional starting location
+  startingLocation?: { lat: number; lng: number }; // Optional starting location (legacy support)
+  eventData?: { // New prop for full event data including starting locations
+    startingLocations?: {
+      [userId: string]: {
+        lat: number;
+        lng: number;
+        description?: string;
+      };
+    };
+  };
 }
 
 export default function EventSchedule({
@@ -97,7 +106,8 @@ export default function EventSchedule({
   eventEnd,
   token,
   isEditing = false,
-  startingLocation
+  startingLocation,
+  eventData
 }: EventScheduleProps) {
   const [schedules, setSchedules] = useState<TravelSchedule[]>([]);
   const [loading, setLoading] = useState(false);
@@ -150,9 +160,22 @@ export default function EventSchedule({
         console.log('Falling back to client-side schedule generation');
         setCached(false);
         
+        // Apply starting locations from eventData if available
+        const friendsWithAppliedStartingLocations = invitedFriends.map(friend => {
+          const userStartingLocation = eventData?.startingLocations?.[friend.id];
+          if (userStartingLocation) {
+            return {
+              ...friend,
+              lat: userStartingLocation.lat,
+              lng: userStartingLocation.lng
+            };
+          }
+          return friend;
+        });
+        
         // Check if friends have location data
-        const friendsWithLocation = invitedFriends.filter(f => f.lat && f.lng);
-        const friendsWithoutLocation = invitedFriends.filter(f => !f.lat || !f.lng);
+        const friendsWithLocation = friendsWithAppliedStartingLocations.filter(f => f.lat && f.lng);
+        const friendsWithoutLocation = friendsWithAppliedStartingLocations.filter(f => !f.lat || !f.lng);
         
         console.log('Friends with location data:', friendsWithLocation);
         console.log('Friends WITHOUT location data:', friendsWithoutLocation);
@@ -168,12 +191,12 @@ export default function EventSchedule({
         
         const { generateEventTravelSchedules } = await import('../lib/travelScheduleService');
         travelSchedules = await generateEventTravelSchedules(
-          invitedFriends,
+          friendsWithAppliedStartingLocations,
           eventLocation,
           startDate,
           endDate,
           token,
-          startingLocation
+          startingLocation // Keep for backward compatibility
         );
       }
 

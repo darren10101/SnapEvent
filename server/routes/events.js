@@ -103,7 +103,7 @@ router.get('/:id', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { name, description, location, start, end, createdBy, participants } = req.body;
+    const { name, description, location, start, end, createdBy, participants, startingLocations } = req.body;
     
     // Basic validation
     if (!name || !location || !start || !end || !createdBy) {
@@ -144,6 +144,7 @@ router.post('/', async (req, res) => {
       end,
       createdBy, // Google ID of creator
       participants: participants || [createdBy], // Array of Google IDs
+      startingLocations: startingLocations || {}, // Object with userId -> {lat, lng, description}
       itineraries: {},
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -173,7 +174,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, location, start, end, participants } = req.body;
+    const { name, description, location, start, end, participants, startingLocations } = req.body;
 
     // Check if event exists
     const existingEvent = await eventsDB.getItem({ id });
@@ -240,6 +241,11 @@ router.put('/:id', async (req, res) => {
       expressionAttributeValues[':participants'] = participants;
     }
 
+    if (startingLocations && typeof startingLocations === 'object') {
+      updateParts.push('startingLocations = :startingLocations');
+      expressionAttributeValues[':startingLocations'] = startingLocations;
+    }
+
     updateExpression = `SET ${updateParts.join(', ')}`;
 
     // Check if we need to invalidate travel schedules cache
@@ -271,6 +277,335 @@ router.put('/:id', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to update event',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * PUT /api/events/:id/starting-location/:userId
+ * Update or set a user's starting location for an event
+ */
+router.put('/:id/starting-location/:userId', async (req, res) => {
+  try {
+    const { id, userId } = req.params;
+    const { lat, lng, description } = req.body;
+
+    // Basic validation
+    if (!lat || !lng) {
+      return res.status(400).json({
+        success: false,
+        error: 'lat and lng coordinates are required'
+      });
+    }
+
+    // Validate that userId is a valid Google ID (basic check)
+    if (typeof userId !== 'string' || userId.length < 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId must be a valid Google ID'
+      });
+    }
+
+    // Check if event exists
+    const existingEvent = await eventsDB.getItem({ id });
+    if (!existingEvent) {
+      return res.status(404).json({
+        success: false,
+        error: 'Event not found'
+      });
+    }
+
+    // Check if user is a participant in the event
+    if (!existingEvent.participants || !existingEvent.participants.includes(userId)) {
+      return res.status(403).json({
+        success: false,
+        error: 'User is not a participant in this event'
+      });
+    }
+
+    // Get existing starting locations or create empty object
+    const existingStartingLocations = existingEvent.startingLocations || {};
+    
+    // Update the user's starting location
+    existingStartingLocations[userId] = {
+      lat: parseFloat(lat),
+      lng: parseFloat(lng),
+      description: description || ''
+    };
+
+    // Update the event with the new starting locations
+    const updatedAttributes = await eventsDB.updateItem(
+      { id },
+      'SET startingLocations = :startingLocations, updatedAt = :updatedAt',
+      {
+        ':startingLocations': existingStartingLocations,
+        ':updatedAt': new Date().toISOString()
+      }
+    );
+
+    // Clear travel schedules cache since starting location changed
+    try {
+      await eventsDB.updateItem(
+        { id },
+        'REMOVE travelSchedulesCache'
+      );
+      console.log(`Cleared travel schedules cache for event ${id} after starting location update (userId route)`);
+    } catch (cacheError) {
+      console.warn('Failed to clear travel schedules cache:', cacheError.message);
+      // Don't fail the request if cache clearing fails
+    }
+
+    res.json({
+      success: true,
+      data: {
+        eventId: id,
+        userId: userId,
+        startingLocation: existingStartingLocations[userId]
+      },
+      message: 'Starting location updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating starting location:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update starting location',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * DELETE /api/events/:id/starting-location/:userId
+ * Remove a user's starting location for an event
+ */
+router.delete('/:id/starting-location/:userId', async (req, res) => {
+  try {
+    const { id, userId } = req.params;
+
+    // Check if event exists
+    const existingEvent = await eventsDB.getItem({ id });
+    if (!existingEvent) {
+      return res.status(404).json({
+        success: false,
+        error: 'Event not found'
+      });
+    }
+
+    // Get existing starting locations
+    const existingStartingLocations = existingEvent.startingLocations || {};
+    
+    // Remove the user's starting location
+    delete existingStartingLocations[userId];
+
+    // Update the event with the new starting locations
+    const updatedAttributes = await eventsDB.updateItem(
+      { id },
+      'SET startingLocations = :startingLocations, updatedAt = :updatedAt',
+      {
+        ':startingLocations': existingStartingLocations,
+        ':updatedAt': new Date().toISOString()
+      }
+    );
+
+    // Clear travel schedules cache since starting location changed
+    try {
+      await eventsDB.updateItem(
+        { id },
+        'REMOVE travelSchedulesCache'
+      );
+      console.log(`Cleared travel schedules cache for event ${id} after starting location removal (userId route)`);
+    } catch (cacheError) {
+      console.warn('Failed to clear travel schedules cache:', cacheError.message);
+      // Don't fail the request if cache clearing fails
+    }
+
+    res.json({
+      success: true,
+      data: {
+        eventId: id,
+        userId: userId
+      },
+      message: 'Starting location removed successfully'
+    });
+  } catch (error) {
+    console.error('Error removing starting location:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to remove starting location',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * PUT /api/events/:id/starting-location
+ * Update or set a user's starting location for an event (with userId in body)
+ */
+router.put('/:id/starting-location', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, location } = req.body;
+    const { lat, lng, description } = location || req.body;
+
+    // Basic validation
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId is required in request body'
+      });
+    }
+
+    if (!lat || !lng) {
+      return res.status(400).json({
+        success: false,
+        error: 'lat and lng coordinates are required'
+      });
+    }
+
+    // Validate that userId is a valid Google ID (basic check)
+    if (typeof userId !== 'string' || userId.length < 10) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId must be a valid Google ID'
+      });
+    }
+
+    // Check if event exists
+    const existingEvent = await eventsDB.getItem({ id });
+    if (!existingEvent) {
+      return res.status(404).json({
+        success: false,
+        error: 'Event not found'
+      });
+    }
+
+    // Check if user is a participant in the event
+    if (!existingEvent.participants || !existingEvent.participants.includes(userId)) {
+      return res.status(403).json({
+        success: false,
+        error: 'User is not a participant in this event'
+      });
+    }
+
+    // Get existing starting locations or create empty object
+    const existingStartingLocations = existingEvent.startingLocations || {};
+    
+    // Update the user's starting location
+    existingStartingLocations[userId] = {
+      lat: parseFloat(lat),
+      lng: parseFloat(lng),
+      description: description || ''
+    };
+
+    // Update the event with the new starting locations
+    const updatedAttributes = await eventsDB.updateItem(
+      { id },
+      'SET startingLocations = :startingLocations, updatedAt = :updatedAt',
+      {
+        ':startingLocations': existingStartingLocations,
+        ':updatedAt': new Date().toISOString()
+      }
+    );
+
+    // Clear travel schedules cache since starting location changed
+    try {
+      await eventsDB.updateItem(
+        { id },
+        'REMOVE travelSchedulesCache'
+      );
+      console.log(`Cleared travel schedules cache for event ${id} after starting location update`);
+    } catch (cacheError) {
+      console.warn('Failed to clear travel schedules cache:', cacheError.message);
+      // Don't fail the request if cache clearing fails
+    }
+
+    res.json({
+      success: true,
+      data: {
+        eventId: id,
+        userId: userId,
+        startingLocation: existingStartingLocations[userId]
+      },
+      message: 'Starting location updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating starting location:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update starting location',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * DELETE /api/events/:id/starting-location
+ * Remove a user's starting location for an event (with userId in body)
+ */
+router.delete('/:id/starting-location', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.body;
+
+    // Basic validation
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: 'userId is required in request body'
+      });
+    }
+
+    // Check if event exists
+    const existingEvent = await eventsDB.getItem({ id });
+    if (!existingEvent) {
+      return res.status(404).json({
+        success: false,
+        error: 'Event not found'
+      });
+    }
+
+    // Get existing starting locations
+    const existingStartingLocations = existingEvent.startingLocations || {};
+    
+    // Remove the user's starting location
+    delete existingStartingLocations[userId];
+
+    // Update the event with the new starting locations
+    const updatedAttributes = await eventsDB.updateItem(
+      { id },
+      'SET startingLocations = :startingLocations, updatedAt = :updatedAt',
+      {
+        ':startingLocations': existingStartingLocations,
+        ':updatedAt': new Date().toISOString()
+      }
+    );
+
+    // Clear travel schedules cache since starting location changed
+    try {
+      await eventsDB.updateItem(
+        { id },
+        'REMOVE travelSchedulesCache'
+      );
+      console.log(`Cleared travel schedules cache for event ${id} after starting location removal`);
+    } catch (cacheError) {
+      console.warn('Failed to clear travel schedules cache:', cacheError.message);
+      // Don't fail the request if cache clearing fails
+    }
+
+    res.json({
+      success: true,
+      data: {
+        eventId: id,
+        userId: userId
+      },
+      message: 'Starting location removed successfully'
+    });
+  } catch (error) {
+    console.error('Error removing starting location:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to remove starting location',
       message: error.message
     });
   }
@@ -552,7 +887,8 @@ router.get('/:id/travel-schedules', async (req, res) => {
       participantIds,
       event.location,
       event.start,
-      event.end
+      event.end,
+      event.startingLocations || {} // Pass starting locations
     );
 
     // Cache the generated schedules
@@ -622,7 +958,8 @@ router.post('/:id/travel-schedules/regenerate', async (req, res) => {
       participantIds,
       event.location,
       event.start,
-      event.end
+      event.end,
+      event.startingLocations || {} // Pass starting locations
     );
 
     // Update cache

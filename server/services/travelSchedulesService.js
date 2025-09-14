@@ -13,9 +13,10 @@ class TravelSchedulesService {
   /**
    * Generate travel schedules for all participants in an event
    */
-  async generateEventTravelSchedules(eventId, participantIds, eventLocation, eventStart, eventEnd) {
+  async generateEventTravelSchedules(eventId, participantIds, eventLocation, eventStart, eventEnd, startingLocations = {}) {
     try {
       console.log(`Generating travel schedules for event ${eventId} with ${participantIds.length} participants`);
+      console.log('Starting locations:', startingLocations);
 
       // Get user data for all participants
       const participants = await this.getParticipantsData(participantIds);
@@ -29,11 +30,25 @@ class TravelSchedulesService {
       const schedules = [];
       for (const participant of participants) {
         try {
+          // Check if participant has a custom starting location for this event
+          const userStartingLocation = startingLocations[participant.id];
+          const originLocation = userStartingLocation ? {
+            lat: userStartingLocation.lat,
+            lng: userStartingLocation.lng
+          } : {
+            lat: participant.lat,
+            lng: participant.lng
+          };
+
+          console.log(`User ${participant.name} (${participant.id}) using location:`, 
+            userStartingLocation ? 'custom starting location' : 'profile location', originLocation);
+
           const schedule = await this.generateUserTravelSchedule(
             participant,
             eventLocation,
             eventStart,
-            eventEnd
+            eventEnd,
+            originLocation // Pass the determined origin location
           );
           
           if (schedule) {
@@ -100,9 +115,11 @@ class TravelSchedulesService {
   /**
    * Generate travel schedule for a single user
    */
-  async generateUserTravelSchedule(user, eventLocation, eventStart, eventEnd) {
+  async generateUserTravelSchedule(user, eventLocation, eventStart, eventEnd, originLocation = null) {
     try {
-      console.log(`Generating schedule for ${user.name} using ${user.transportModes[0]}`);
+      // Use provided origin location or fall back to user's profile location
+      const origin = originLocation || { lat: user.lat, lng: user.lng };
+      console.log(`Generating schedule for ${user.name} using ${user.transportModes[0]} from`, origin);
 
       const primaryMode = user.transportModes[0] || 'driving';
       const startDate = new Date(eventStart);
@@ -110,7 +127,7 @@ class TravelSchedulesService {
 
       // Calculate outbound trip (to event) - arrive by event start time
       const outboundDirections = await this.calculateTravelDirections(
-        { lat: user.lat, lng: user.lng },
+        origin,
         eventLocation,
         primaryMode,
         { arrivalTime: startDate }
@@ -124,7 +141,7 @@ class TravelSchedulesService {
       // Calculate return trip (from event) - depart when event ends
       const returnDirections = await this.calculateTravelDirections(
         eventLocation,
-        { lat: user.lat, lng: user.lng },
+        origin,
         primaryMode,
         { departureTime: endDate }
       );

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, Pressable, ScrollView, Image } from 'react-native';
 import EventSchedule from './EventSchedule';
+import EventParticipantModal from './EventParticipantModal';
 
 type EventItem = {
 	id: string;
@@ -17,6 +18,7 @@ type EventItem = {
 	createdBy: string;
 	createdAt: string;
 	updatedAt: string;
+	startingLocations?: { [userId: string]: { lat: number; lng: number; description?: string } };
 };
 
 type Friend = {
@@ -60,6 +62,7 @@ export default function EventPreviewModal({
 }: EventPreviewModalProps) {
 	const [participantUsers, setParticipantUsers] = useState<Record<string, User>>({});
 	const [loadingParticipants, setLoadingParticipants] = useState(false);
+	const [showParticipantModal, setShowParticipantModal] = useState(false);
 
 	// Fetch user details for unknown participants
 	useEffect(() => {
@@ -362,9 +365,15 @@ export default function EventPreviewModal({
 						<Text style={{ fontSize: 16, fontWeight: '600', color: '#666' }}>Close</Text>
 					</Pressable>
 					
-					{isCreator && (
+					{currentUser && event.participants.includes(currentUser.id) && (
 						<Pressable
-							onPress={() => onEdit(event)}
+							onPress={() => {
+								if (isCreator) {
+									onEdit(event);
+								} else {
+									setShowParticipantModal(true);
+								}
+							}}
 							style={{
 								flex: 1,
 								paddingVertical: 12,
@@ -373,11 +382,23 @@ export default function EventPreviewModal({
 								alignItems: 'center'
 							}}
 						>
-							<Text style={{ fontSize: 16, fontWeight: '600', color: '#fff' }}>Edit Event</Text>
+							<Text style={{ fontSize: 16, fontWeight: '600', color: '#fff' }}>
+								{isCreator ? 'Edit Event' : 'View Details'}
+							</Text>
 						</Pressable>
 					)}
 				</View>
 			</View>
+
+			{/* Participant Modal */}
+			{event && (
+				<EventParticipantModal
+					visible={showParticipantModal}
+					event={event}
+					friends={friends}
+					onClose={() => setShowParticipantModal(false)}
+				/>
+			)}
 		</Modal>
 	);
 }
