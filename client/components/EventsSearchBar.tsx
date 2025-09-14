@@ -3,6 +3,9 @@ import { View, TextInput, Pressable, FlatList, Text, ActivityIndicator } from "r
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
+import AISuggestionsPopup from "./AISuggestionsPopup";
+import { AISuggestion } from "../types/ai";
+import { useAuth } from "../contexts/AuthContext";
 import FriendPicker from "./FriendPicker";
 
 type Friend = { id: string; name: string; username?: string };
@@ -24,6 +27,12 @@ export type EventsSearchBarProps = {
 	onPlaceCleared?: () => void;
 	mapCenter?: { lat: number; lng: number };
 	onQueryChange?: (text: string, origin?: QueryOrigin) => void;
+	// Optional AI submit callback: when provided, we'll await it and show loading
+	onAiSubmit?: (prompt: string) => Promise<void> | void;
+	// Notifies parent when AI mode toggles
+	onAiModeChange?: (enabled: boolean) => void;
+    // Notifies parent when an AI suggestion is selected
+    onAiSuggestionSelected?: (suggestion: AISuggestion) => void;
 };
 
 export type EventsSearchBarHandle = {
@@ -31,9 +40,10 @@ export type EventsSearchBarHandle = {
 	setQueryText: (text: string) => void;
 };
 
-const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarProps>(function EventsSearchBar({ navigateOnFocus = true, autoFocus = false, onFocus, onCreatePress, onFriendsSelected, friendsList, onPlaceSelected, onPlaceCleared, mapCenter, onQueryChange }: EventsSearchBarProps, ref) {
+const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarProps>(function EventsSearchBar({ navigateOnFocus = true, autoFocus = false, onFocus, onCreatePress, onFriendsSelected, friendsList, onPlaceSelected, onPlaceCleared, mapCenter, onQueryChange, onAiSubmit, onAiModeChange, onAiSuggestionSelected }: EventsSearchBarProps, ref) {
 	const router = useRouter();
 	const insets = useSafeAreaInsets();
+    const { user, token } = useAuth();
 	const inputRef = useRef<TextInput | null>(null);
 	const [showFriendPicker, setShowFriendPicker] = useState(false);
 	const friends: Friend[] = friendsList ?? [];
@@ -44,6 +54,13 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 	const [isFetching, setIsFetching] = useState(false);
 	const [hasSelectedPlace, setHasSelectedPlace] = useState(false);
 	const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+	const [aiMode, setAiMode] = useState(false);
+	const [aiSubmitting, setAiSubmitting] = useState(false);
+    const [aiSuggestionsVisible, setAiSuggestionsVisible] = useState(false);
+	const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([]);
+	const [aiReasoning, setAiReasoning] = useState<string | null>(null);
+	const [aiSummary, setAiSummary] = useState<string | null>(null);
+    const [aiError, setAiError] = useState<string | null>(null);
 
 	const toggleInvite = (friendId: string) => {
 		setInvitedFriendIds(prev => {
@@ -69,7 +86,9 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 			setHasSelectedPlace(true);
 			// Trigger autocomplete immediately for programmatic text so dropdown is ready
 			// Avoid debounce here to feel responsive
-			void fetchAutocomplete(text);
+			if (!aiMode) {
+				void fetchAutocomplete(text);
+			}
 		},
 	}), [onQueryChange]);
 
@@ -131,7 +150,57 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 		}
 		
 		if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+		if (aiMode) {
+			setSuggestions([]);
+			return;
+		}
 		debounceTimerRef.current = setTimeout(() => fetchAutocomplete(text), 250);
+	};
+
+	const submitAiPrompt = async () => {
+		if (!query.trim() || aiSubmitting) return;
+		try {
+			setAiSubmitting(true);
+			if (onAiSubmit) {
+				await onAiSubmit(query.trim());
+			} else {
+				setAiError(null);
+				setAiSuggestionsVisible(true);
+				const res = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/agent/suggest/events`, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+					},
+					body: JSON.stringify({ prompt: query.trim() }),
+				});
+        console.log('res', res);
+				const data = await res.json();
+				if (res.ok && data.success) {
+					const suggestions: AISuggestion[] = data.data?.suggestions || [];
+					setAiSuggestions(Array.isArray(suggestions) ? suggestions : []);
+					// Try to extract AI reasoning/justification from response
+					let aiReason = null;
+					if (data.data?.finalResponse?.reasoning?.explanation) {
+						aiReason = data.data.finalResponse.reasoning.explanation;
+					} else if (data.data?.finalResponse?.text?.value) {
+						aiReason = data.data.finalResponse.text.value;
+					} else if (data.data?.finalResponse?.text) {
+						aiReason = data.data.finalResponse.text;
+					}
+					setAiReasoning(typeof aiReason === 'string' ? aiReason : null);
+					// Set summary paragraph if present
+					setAiSummary(data.data.out || data.summary || data.data?.summaryParagraph || null);
+				} else {
+					setAiSuggestions([]);
+					setAiReasoning(null);
+					setAiSummary(null);
+					setAiError(data.message || 'Failed to generate suggestions');
+				}
+			}
+		} finally {
+			setAiSubmitting(false);
+		}
 	};
 
 	const selectSuggestion = async (s: PlaceSuggestion) => {
@@ -165,6 +234,8 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 		}
 	};
 
+	const topBarOffset = aiMode ? 130 : 60;
+
 	return (
 		<>
 			<View style={{ position: "absolute", top: insets.top + 12, left: 12, right: 12, backgroundColor: "#fff", borderRadius: 10, elevation: 3, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, paddingHorizontal: 12, paddingVertical: 10 }} pointerEvents="box-none">
@@ -172,7 +243,10 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 					<TextInput
 						ref={(r) => { inputRef.current = r; }}
 						placeholder="Search events or places"
-						style={{ flex: 1, marginRight: 8 }}
+						style={{ flex: 1, marginRight: 8, height: aiMode ? 100 : 45, textAlignVertical: 'top' }}
+						multiline={aiMode}
+						scrollEnabled={aiMode}
+						numberOfLines={aiMode ? undefined : 1}
 						onFocus={() => { onFocus?.(); if (navigateOnFocus) goToCreate(); }}
 						autoFocus={autoFocus}
 						value={query}
@@ -180,20 +254,35 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 					/>
 					{isFetching ? (
 						<ActivityIndicator size="small" color="#1A73E8" style={{ marginRight: 8 }} />
-					) : (
-						<Pressable onPress={goToCreate} hitSlop={8} style={{ padding: 4 }}>
-							<Ionicons name="search" size={22} color="#1A73E8" />
+					) : null}
+
+					{aiMode && (
+						<Pressable
+							onPress={submitAiPrompt}
+							disabled={aiSubmitting || !query.trim()}
+							hitSlop={8}
+							style={{ padding: 6, borderRadius: 8, backgroundColor: aiSubmitting || !query.trim() ? '#93C5FD' : '#1A73E8', marginRight: 8 }}
+						>
+							{aiSubmitting ? (
+								<ActivityIndicator size="small" color="#fff" />
+							) : (
+								<Ionicons name="send" size={18} color="#fff" />
+							)}
 						</Pressable>
 					)}
+
+					<Pressable onPress={() => { const next = !aiMode; setAiMode(next); if (next) { setSuggestions([]); } onAiModeChange?.(next); }} hitSlop={8} style={{ padding: 4, marginRight: 4 }}>
+						<Ionicons name={aiMode ? "flask" : "flask-outline"} size={20} color="#1A73E8" />
+					</Pressable>
 					<Pressable onPress={() => setShowFriendPicker(true)} hitSlop={8} style={{ padding: 4 }}>
-						<Ionicons name="people" size={22} color="#1A73E8" />
+						<Ionicons name="people" size={20} color="#1A73E8" />
 					</Pressable>
 				</View>
 			</View>
 
 			{/* Autocomplete dropdown */}
-			{suggestions.length > 0 && !showFriendPicker ? (
-				<View style={{ position: "absolute", top: insets.top + 60, left: 12, right: 12, backgroundColor: "#fff", borderRadius: 10, elevation: 3, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, maxHeight: 260, overflow: "hidden" }}>
+			{suggestions.length > 0 && !showFriendPicker && !aiMode ? (
+				<View style={{ position: "absolute", top: insets.top + topBarOffset, left: 12, right: 12, backgroundColor: "#fff", borderRadius: 10, elevation: 3, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, maxHeight: 260, overflow: "hidden" }}>
 					<FlatList
 						keyboardShouldPersistTaps="handled"
 						data={suggestions}
@@ -208,13 +297,38 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 				</View>
 			) : null}
 
+			{/* AI Suggestions Popup */}
+			<AISuggestionsPopup
+				visible={aiMode && aiSuggestionsVisible}
+				suggestions={aiSuggestions}
+				onClose={() => setAiSuggestionsVisible(false)}
+				onSelect={(s) => {
+					// Prefill: open create modal upstream by selecting location and setting query text
+					if (s.location && typeof s.location.lat === 'number' && typeof s.location.lng === 'number') {
+						// Use description in search bar for UX continuity
+						const desc = s.location.description || `${s.location.lat.toFixed(4)}, ${s.location.lng.toFixed(4)}`;
+						setQuery(desc);
+						onPlaceSelected?.({ lat: s.location.lat, lng: s.location.lng, description: desc });
+					}
+					// Notify parent about the suggestion for further prefill (title, times, friends)
+					onAiSuggestionSelected?.(s);
+					// Hide popup after selection
+					setAiSuggestionsVisible(false);
+				}}
+				isLoading={aiSubmitting}
+				error={aiError}
+				topOffset={topBarOffset}
+				aiReasoning={aiReasoning}
+				aiSummary={aiSummary}
+			/>
+
 			<FriendPicker
 				visible={showFriendPicker}
 				onClose={() => setShowFriendPicker(false)}
 				friends={friends}
 				invitedFriendIds={invitedFriendIds}
 				onToggleInvite={toggleInvite}
-				topOffset={60}
+				topOffset={topBarOffset}
 				onDone={(ids) => { onFriendsSelected?.(ids); }}
 			/>
 		</>

@@ -8,6 +8,7 @@ import EventCreationModal from "../../../components/EventCreationModal";
 import EventPreviewModal from "../../../components/EventPreviewModal";
 import EventEditModal from "../../../components/EventEditModal";
 import { useAuth } from "../../../contexts/AuthContext";
+import { AISuggestion } from "../../../types/ai";
 
 type EventItem = { 
 	id: string; 
@@ -103,6 +104,8 @@ export default function EventsScreen() {
 	const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
 	const [showEventEdit, setShowEventEdit] = useState(false);
 	const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
+	const [isAiMode, setIsAiMode] = useState(false);
+  const [aiPrefill, setAiPrefill] = useState<{ title?: string; description?: string; start?: Date; end?: Date; invitedFriendIds?: string[] } | null>(null);
 
 	const loadEvents = async () => {
 		if (!user) return;
@@ -195,9 +198,11 @@ export default function EventsScreen() {
 	const handleEventCancel = () => {
 		setShowEventCreation(false);
 		setEventCreationPlace(null);
+		setAiPrefill(null);
 	};
 
 	const handleEventClick = (event: EventItem) => {
+		if (isAiMode) return;
 		setSelectedEvent(event);
 		setShowEventPreview(true);
 	};
@@ -398,6 +403,12 @@ export default function EventsScreen() {
 					}}
 					friendsList={friends}
 					mapCenter={mapCenter}
+					onAiModeChange={(enabled) => {
+						setIsAiMode(enabled);
+						if (enabled) {
+							setShowEventPreview(false);
+						}
+					}}
 					onFriendsSelected={(ids) => {
 						setSelectedFriendIds(ids);
 						setFitSignal(s => s + 1);
@@ -407,6 +418,18 @@ export default function EventsScreen() {
 						setEventCreationPlace(place);
 						setShowEventCreation(true);
 						setFitSignal(s => s + 1);
+					}}
+					onAiSuggestionSelected={(s: AISuggestion) => {
+						// Prepare prefill data based on AI suggestion
+						const invited = Array.isArray(s.friends) ? s.friends.map(f => f.id) : [];
+						setAiPrefill({
+							title: s.title,
+							description: s.description,
+							start: s.startTime ? new Date(s.startTime) : undefined,
+							end: s.endTime ? new Date(s.endTime) : undefined,
+							invitedFriendIds: invited,
+						});
+						setShowEventCreation(true);
 					}}
 					onPlaceCleared={() => {
 						setSelectedPlace(null);
@@ -567,17 +590,24 @@ export default function EventsScreen() {
 				onClose={handleEventCancel}
 				token={token || undefined}
 				onSave={handleEventSave}
+				initialTitle={aiPrefill?.title}
+				initialDescription={aiPrefill?.description}
+				initialStartDate={aiPrefill?.start}
+				initialEndDate={aiPrefill?.end}
+				initialInvitedFriendIds={aiPrefill?.invitedFriendIds}
 			/>
 
-			<EventPreviewModal
-				visible={showEventPreview}
-				event={selectedEvent}
-				friends={friends}
-				currentUser={user || undefined}
-				token={token || undefined}
-				onClose={() => setShowEventPreview(false)}
-				onEdit={handleEventEdit}
-			/>
+			{!isAiMode ? (
+				<EventPreviewModal
+					visible={showEventPreview && !isAiMode}
+					event={selectedEvent}
+					friends={friends}
+					currentUser={user || undefined}
+					token={token || undefined}
+					onClose={() => setShowEventPreview(false)}
+					onEdit={handleEventEdit}
+				/>
+			) : null}
 
 			<EventEditModal
 				visible={showEventEdit}
