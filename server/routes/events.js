@@ -501,6 +501,7 @@ router.get('/:id/travel-schedules', async (req, res) => {
   try {
     const { id } = req.params;
     const { regenerate } = req.query;
+    const requestingUserId = req.user?.id; // Get the requesting user ID from auth
 
     const event = await eventsDB.getItem({ id });
     
@@ -510,6 +511,8 @@ router.get('/:id/travel-schedules', async (req, res) => {
         error: 'Event not found'
       });
     }
+
+    console.log(`Travel schedules request for event ${id} by user ${requestingUserId}`);
 
     // Check if cached schedules exist and are valid (unless regenerate is requested)
     const shouldRegenerate = regenerate === 'true' || !event.travelSchedulesCache || !event.travelSchedulesCache.data;
@@ -533,11 +536,20 @@ router.get('/:id/travel-schedules', async (req, res) => {
     // Need to regenerate schedules
     console.log(`Generating travel schedules for event ${id}`);
     
+    // Ensure requesting user is included in participants if they're authenticated
+    let participantIds = event.participants || [];
+    if (requestingUserId && !participantIds.includes(requestingUserId)) {
+      console.log(`Adding requesting user ${requestingUserId} to participants list`);
+      participantIds = [...participantIds, requestingUserId];
+    }
+    
+    console.log(`Participants for schedule generation:`, participantIds);
+    
     // Generate new travel schedules
     const travelSchedulesService = require('../services/travelSchedulesService');
     const schedules = await travelSchedulesService.generateEventTravelSchedules(
       event.id,
-      event.participants || [],
+      participantIds,
       event.location,
       event.start,
       event.end
@@ -581,6 +593,7 @@ router.get('/:id/travel-schedules', async (req, res) => {
 router.post('/:id/travel-schedules/regenerate', async (req, res) => {
   try {
     const { id } = req.params;
+    const requestingUserId = req.user?.id; // Get the requesting user ID from auth
 
     const event = await eventsDB.getItem({ id });
     
@@ -591,13 +604,22 @@ router.post('/:id/travel-schedules/regenerate', async (req, res) => {
       });
     }
 
-    console.log(`Force regenerating travel schedules for event ${id}`);
+    console.log(`Force regenerating travel schedules for event ${id} by user ${requestingUserId}`);
+    
+    // Ensure requesting user is included in participants if they're authenticated
+    let participantIds = event.participants || [];
+    if (requestingUserId && !participantIds.includes(requestingUserId)) {
+      console.log(`Adding requesting user ${requestingUserId} to participants list for regeneration`);
+      participantIds = [...participantIds, requestingUserId];
+    }
+    
+    console.log(`Participants for schedule regeneration:`, participantIds);
     
     // Generate new travel schedules
     const travelSchedulesService = require('../services/travelSchedulesService');
     const schedules = await travelSchedulesService.generateEventTravelSchedules(
       event.id,
-      event.participants || [],
+      participantIds,
       event.location,
       event.start,
       event.end

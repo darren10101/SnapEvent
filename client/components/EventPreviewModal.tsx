@@ -61,8 +61,6 @@ export default function EventPreviewModal({
 	const [participantUsers, setParticipantUsers] = useState<Record<string, User>>({});
 	const [loadingParticipants, setLoadingParticipants] = useState(false);
 
-	if (!event) return null;
-
 	// Fetch user details for unknown participants
 	useEffect(() => {
 		const fetchParticipantDetails = async () => {
@@ -109,6 +107,9 @@ export default function EventPreviewModal({
 
 		fetchParticipantDetails();
 	}, [event?.participants, token, currentUser?.id, friends]);
+
+	// Early return after all hooks are declared
+	if (!event) return null;
 
 	const formatDateTime = (dateString: string) => {
 		const date = new Date(dateString);

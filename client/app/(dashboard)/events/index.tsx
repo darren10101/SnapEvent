@@ -503,6 +503,7 @@ export default function EventsScreen() {
 				visible={showEventCreation}
 				selectedPlace={eventCreationPlace}
 				friends={friends}
+				currentUser={user || undefined}
 				onClose={handleEventCancel}
 				onSelectStartingLocation={() => {
 					setIsSelectingStartingLocation(true);

@@ -30,10 +30,22 @@ type Friend = {
   lng?: number;
 };
 
+type User = {
+  id: string;
+  name: string;
+  email?: string;
+  picture?: string;
+  lat?: number;
+  lng?: number;
+  latitude?: number;
+  longitude?: number;
+};
+
 export type EventCreationModalProps = {
   visible: boolean;
   selectedPlace: SelectedPlace | null;
   friends?: Friend[];
+  currentUser?: User;
   onClose: () => void;
   onSelectStartingLocation?: () => void;
   selectedStartingLocation?: SelectedPlace | null;
@@ -53,6 +65,7 @@ export default function EventCreationModal({
   visible,
   selectedPlace,
   friends = [],
+  currentUser,
   onClose,
   onSelectStartingLocation,
   selectedStartingLocation,
@@ -69,7 +82,9 @@ export default function EventCreationModal({
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [startPickerMode, setStartPickerMode] = useState<"date" | "time">("date");
   const [endPickerMode, setEndPickerMode] = useState<"date" | "time">("date");
-  const [invitedFriends, setInvitedFriends] = useState<Set<string>>(new Set());
+  const [invitedFriends, setInvitedFriends] = useState<Set<string>>(
+    new Set(currentUser ? [currentUser.id] : [])
+  );
   const [startingLocation, setStartingLocation] = useState<SelectedPlace | null>(null);
 
   // Update starting location when prop changes
@@ -79,6 +94,17 @@ export default function EventCreationModal({
     }
   }, [selectedStartingLocation]);
 
+  // Ensure current user is always included when modal opens or currentUser changes
+  useEffect(() => {
+    if (currentUser && visible) {
+      setInvitedFriends(prev => {
+        const newSet = new Set(prev);
+        newSet.add(currentUser.id);
+        return newSet;
+      });
+    }
+  }, [currentUser?.id, visible]);
+
   const resetForm = () => {
     setTitle("");
     setDescription("");
@@ -86,11 +112,16 @@ export default function EventCreationModal({
     setEndDate(new Date(Date.now() + 60 * 60 * 1000));
     setShowStartPicker(false);
     setShowEndPicker(false);
-    setInvitedFriends(new Set());
+    setInvitedFriends(new Set(currentUser ? [currentUser.id] : []));
     setStartingLocation(null);
   };
 
   const toggleFriendInvite = (friendId: string) => {
+    // Don't allow current user to unselect themselves
+    if (friendId === currentUser?.id) {
+      return;
+    }
+    
     setInvitedFriends(prev => {
       const next = new Set(prev);
       if (next.has(friendId)) {
@@ -421,88 +452,149 @@ export default function EventCreationModal({
             </View>
           </View>
 
-          {/* Invite Friends */}
-          {friends.length > 0 && (
-            <View style={{ marginBottom: 24 }}>
-              <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 8 }}>
-                Invite Friends ({invitedFriends.size} selected)
-              </Text>
-              <View
-                style={{
-                  borderWidth: 1,
-                  borderColor: "#D1D5DB",
-                  borderRadius: 8,
-                  backgroundColor: "#fff",
-                  maxHeight: 200,
-                }}
-              >
-                <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled={true}>
-                  {friends.map((item) => (
-                    <Pressable
-                      key={item.id}
-                      onPress={() => toggleFriendInvite(item.id)}
+          {/* Participants */}
+          <View style={{ marginBottom: 24 }}>
+            <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 8 }}>
+              Participants ({invitedFriends.size + 1} total)
+            </Text>
+            <View
+              style={{
+                borderWidth: 1,
+                borderColor: "#D1D5DB",
+                borderRadius: 8,
+                backgroundColor: "#fff",
+                maxHeight: 200,
+              }}
+            >
+              <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled={true}>
+                {/* Current User (Event Creator) */}
+                {currentUser && (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      padding: 12,
+                      borderBottomWidth: friends.length > 0 ? 1 : 0,
+                      borderBottomColor: "#F3F4F6",
+                      backgroundColor: "#F8F9FA",
+                    }}
+                  >
+                    <View
                       style={{
-                        flexDirection: "row",
+                        width: 32,
+                        height: 32,
+                        borderRadius: 16,
+                        backgroundColor: currentUser.picture ? "transparent" : "#1A73E8",
+                        borderWidth: 2,
+                        borderColor: "#1A73E8",
                         alignItems: "center",
-                        padding: 12,
-                        borderBottomWidth: 1,
-                        borderBottomColor: "#F3F4F6",
+                        justifyContent: "center",
+                        marginRight: 12,
+                        overflow: "hidden",
                       }}
                     >
-                      <View
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: 16,
-                          backgroundColor: item.picture ? "transparent" : "#10B981",
-                          borderWidth: 2,
-                          borderColor: invitedFriends.has(item.id) ? "#1A73E8" : "#E5E7EB",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          marginRight: 12,
-                          overflow: "hidden",
-                        }}
-                      >
-                        {item.picture ? (
-                          <Image
-                            source={{ uri: item.picture }}
-                            style={{ width: 28, height: 28, borderRadius: 14 }}
-                          />
-                        ) : (
-                          <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>
-                            {item.name.charAt(0).toUpperCase()}
-                          </Text>
-                        )}
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: "500" }}>
-                          {item.name}
+                      {currentUser.picture ? (
+                        <Image
+                          source={{ uri: currentUser.picture }}
+                          style={{ width: 28, height: 28, borderRadius: 14 }}
+                        />
+                      ) : (
+                        <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>
+                          {currentUser.name.charAt(0).toUpperCase()}
                         </Text>
-                        {item.email && (
-                          <Text style={{ fontSize: 14, color: "#6B7280" }}>
-                            {item.email}
-                          </Text>
-                        )}
-                      </View>
-                      {invitedFriends.has(item.id) && (
-                        <Ionicons name="checkmark-circle" size={24} color="#1A73E8" />
                       )}
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </View>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: "500" }}>
+                        {currentUser.name} (You)
+                      </Text>
+                      {currentUser.email && (
+                        <Text style={{ fontSize: 14, color: "#6B7280" }}>
+                          {currentUser.email}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={{ paddingHorizontal: 8, paddingVertical: 4, backgroundColor: "#1A73E8", borderRadius: 12 }}>
+                      <Text style={{ fontSize: 12, fontWeight: "600", color: "#fff" }}>Creator</Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* Other Friends */}
+                {friends.map((item) => (
+                  <Pressable
+                    key={item.id}
+                    onPress={() => toggleFriendInvite(item.id)}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      padding: 12,
+                      borderBottomWidth: 1,
+                      borderBottomColor: "#F3F4F6",
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 16,
+                        backgroundColor: item.picture ? "transparent" : "#10B981",
+                        borderWidth: 2,
+                        borderColor: invitedFriends.has(item.id) ? "#1A73E8" : "#E5E7EB",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginRight: 12,
+                        overflow: "hidden",
+                      }}
+                    >
+                      {item.picture ? (
+                        <Image
+                          source={{ uri: item.picture }}
+                          style={{ width: 28, height: 28, borderRadius: 14 }}
+                        />
+                      ) : (
+                        <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>
+                          {item.name.charAt(0).toUpperCase()}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: "500" }}>
+                        {item.name}
+                      </Text>
+                      {item.email && (
+                        <Text style={{ fontSize: 14, color: "#6B7280" }}>
+                          {item.email}
+                        </Text>
+                      )}
+                    </View>
+                    {invitedFriends.has(item.id) && (
+                      <Ionicons name="checkmark-circle" size={24} color="#1A73E8" />
+                    )}
+                  </Pressable>
+                ))}
+              </ScrollView>
             </View>
-          )}
+          </View>
 
           {/* Travel Schedule Preview */}
-          {invitedFriends.size > 0 && selectedPlace && (
+          {selectedPlace && currentUser && (
             <View style={{ marginBottom: 24 }}>
               <EventSchedule
-                invitedFriends={friends.filter(friend => invitedFriends.has(friend.id)).map(friend => ({
-                  ...friend,
-                  lat: friend.lat,
-                  lng: friend.lng
-                }))}
+                invitedFriends={[
+                  ...(currentUser ? [{
+                    id: currentUser.id,
+                    name: currentUser.name,
+                    picture: currentUser.picture,
+                    lat: currentUser.lat || currentUser.latitude,
+                    lng: currentUser.lng || currentUser.longitude
+                  }] : []),
+                  ...friends.filter(friend => invitedFriends.has(friend.id)).map(friend => ({
+                    ...friend,
+                    lat: friend.lat,
+                    lng: friend.lng
+                  }))
+                ]}
                 eventLocation={selectedPlace}
                 eventStart={startDate.toISOString()}
                 eventEnd={endDate.toISOString()}

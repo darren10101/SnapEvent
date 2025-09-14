@@ -123,12 +123,25 @@ export default function EventSchedule({
     try {
       let travelSchedules: TravelSchedule[] = [];
 
+      console.log('Loading schedules with:', {
+        eventId,
+        invitedFriendsCount: invitedFriends.length,
+        isEditing,
+        startingLocation,
+        invitedFriends: invitedFriends.map(f => ({ 
+          id: f.id, 
+          name: f.name, 
+          hasLocation: !!(f.lat && f.lng) 
+        }))
+      });
+
       // Try to use cached API if eventId is available
       if (eventId) {
         const scheduleData = await loadCachedTravelSchedules(eventId, isEditing, token);
         if (scheduleData) {
           travelSchedules = scheduleData.schedules;
           setCached(scheduleData.cached);
+          console.log('Loaded cached schedules:', travelSchedules.map(s => ({ userId: s.userId, userName: s.userName })));
         }
       }
 

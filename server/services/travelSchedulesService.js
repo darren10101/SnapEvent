@@ -58,11 +58,20 @@ class TravelSchedulesService {
    */
   async getParticipantsData(participantIds) {
     try {
+      console.log(`Fetching data for ${participantIds.length} participants:`, participantIds);
       const participants = [];
       
       for (const userId of participantIds) {
         try {
           const user = await this.usersDB.getItem({ id: userId });
+          console.log(`User ${userId} data:`, {
+            found: !!user,
+            hasLocation: !!(user?.lat && user?.lng),
+            lat: user?.lat,
+            lng: user?.lng,
+            name: user?.name
+          });
+          
           if (user && user.lat && user.lng) {
             participants.push({
               id: user.id,
@@ -80,6 +89,7 @@ class TravelSchedulesService {
         }
       }
 
+      console.log(`Found ${participants.length} participants with valid location data`);
       return participants;
     } catch (error) {
       console.error('Error getting participants data:', error);
