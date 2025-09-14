@@ -49,7 +49,54 @@ Calculate directions between two points with optional waypoints.
       "startAddress": "San Francisco, CA",
       "endAddress": "San Francisco, CA",
       "polyline": "encoded_polyline_string",
-      "legs": [...]
+      "legs": [{
+        "distance": { "text": "15.4 km", "value": 15420 },
+        "duration": { "text": "20 mins", "value": 1200 },
+        "startAddress": "San Francisco, CA",
+        "endAddress": "San Francisco, CA",
+        "startLocation": { "lat": 37.7749, "lng": -122.4194 },
+        "endLocation": { "lat": 37.7849, "lng": -122.4094 },
+        "steps": [{
+          "distance": { "text": "0.8 mi", "value": 1239 },
+          "duration": { "text": "5 mins", "value": 300 },
+          "instructions": "Bus towards City College",
+          "maneuver": null,
+          "polyline": "encoded_polyline_string",
+          "travelMode": "TRANSIT",
+          "transitDetails": {
+            "departureStop": {
+              "name": "Van Ness Ave & Market St",
+              "location": { "lat": 37.77517, "lng": -122.4193099 }
+            },
+            "arrivalStop": {
+              "name": "Mission St & 16th St", 
+              "location": { "lat": 37.7648241, "lng": -122.4197653 }
+            },
+            "departureTime": {
+              "text": "9:34 PM",
+              "value": 1757824477,
+              "timeZone": "America/Los_Angeles"
+            },
+            "arrivalTime": {
+              "text": "9:40 PM", 
+              "value": 1757824831,
+              "timeZone": "America/Los_Angeles"
+            },
+            "line": {
+              "name": "Van Ness-Mission",
+              "shortName": "49",
+              "color": "#005b95",
+              "vehicle": {
+                "name": "Bus",
+                "type": "BUS",
+                "icon": "//maps.gstatic.com/mapfiles/transit/iw2/6/bus2.png"
+              }
+            },
+            "headsign": "City College",
+            "numStops": 4
+          }
+        }]
+      }]
     }]
   },
   "message": "Route calculated successfully"

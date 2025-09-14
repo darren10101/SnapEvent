@@ -416,7 +416,8 @@ export default function EventsScreen() {
 				visible={showEventPreview}
 				event={selectedEvent}
 				friends={friends}
-				currentUserId={user?.id}
+				currentUser={user || undefined}
+				token={token || undefined}
 				onClose={() => setShowEventPreview(false)}
 				onEdit={handleEventEdit}
 			/>

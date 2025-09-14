@@ -6,6 +6,58 @@ const router = express.Router();
 const directionsService = new GoogleDirectionsService();
 
 /**
+ * GET /directions
+ * Calculate route between two points using query parameters
+ * Query: ?origin=lat,lng&destination=lat,lng&mode=driving&departure_time=timestamp
+ */
+router.get('/', async (req, res) => {
+  try {
+    const {
+      origin,
+      destination,
+      mode = 'driving',
+      departure_time,
+      arrival_time,
+      avoid
+    } = req.query;
+
+    // Validate required fields
+    if (!origin || !destination) {
+      return res.status(400).json({
+        success: false,
+        error: 'Origin and destination are required'
+      });
+    }
+
+    const result = await directionsService.getDirections({
+      origin,
+      destination,
+      mode,
+      departure_time,
+      arrival_time,
+      avoid
+    });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json({
+      success: true,
+      data: result.data,
+      message: 'Route calculated successfully'
+    });
+  } catch (error) {
+    console.error('Error in route calculation:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to calculate route',
+      message: error.message
+    });
+  }
+});
+
+/**
  * POST /directions/route
  * Calculate route between two points
  * Body: { origin, destination, mode?, departure_time?, waypoints?, avoid? }

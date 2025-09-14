@@ -1242,4 +1242,175 @@ router.post('/:googleId/travel-time', authenticateToken, requireOwnership, async
   }
 });
 
+/**
+ * GET /api/users/:googleId/friends
+ * Get user's friends list (for demo, returns other users with location data)
+ */
+router.get('/:googleId/friends', authenticateToken, async (req, res) => {
+  try {
+    const { googleId } = req.params;
+    
+    // For demo purposes, get all users except the current user
+    // In a real app, you'd have a proper friends/connections system
+    const allUsers = await usersDB.scanTable();
+    const friends = allUsers
+      .filter(user => user.id !== googleId && user.lat && user.lng) // Only include users with location data
+      .map(user => ({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        picture: user.picture,
+        lat: user.lat,
+        lng: user.lng
+      }));
+
+    res.json({
+      success: true,
+      data: friends,
+      count: friends.length
+    });
+  } catch (error) {
+    console.error('Error fetching friends:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch friends',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/users/:googleId/transport-settings
+ * Get user's transport settings
+ */
+router.get('/:googleId/transport-settings', authenticateToken, async (req, res) => {
+  try {
+    const { googleId } = req.params;
+    
+    // Verify user has permission to access this data
+    if (req.user.id !== googleId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied'
+      });
+    }
+
+    const user = await usersDB.getItem({ id: googleId });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        transportModes: user.transportModes || ['driving']
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching transport settings:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch transport settings',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * PUT /api/users/:googleId/transport-settings
+ * Update user's transport settings
+ */
+router.put('/:googleId/transport-settings', authenticateToken, async (req, res) => {
+  try {
+    const { googleId } = req.params;
+    const { transportModes } = req.body;
+    
+    // Verify user has permission to update this data
+    if (req.user.id !== googleId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied'
+      });
+    }
+
+    // Validate transport modes
+    const validModes = ['walking', 'driving', 'transit', 'bicycling'];
+    if (!Array.isArray(transportModes) || 
+        transportModes.length === 0 || 
+        !transportModes.every(mode => validModes.includes(mode))) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid transport modes'
+      });
+    }
+
+    // Update user's transport modes
+    const updatedUser = await usersDB.updateItem(
+      { id: googleId },
+      {
+        transportModes: transportModes,
+        updatedAt: new Date().toISOString()
+      }
+    );
+
+    res.json({
+      success: true,
+      data: updatedUser
+    });
+  } catch (error) {
+    console.error('Error updating transport settings:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update transport settings',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/users/transport-settings/batch
+ * Get transport settings for multiple users
+ */
+router.post('/transport-settings/batch', authenticateToken, async (req, res) => {
+  try {
+    const { userIds } = req.body;
+    
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'userIds must be a non-empty array'
+      });
+    }
+
+    const transportSettings = {};
+    
+    // Get transport settings for each user
+    for (const userId of userIds) {
+      try {
+        const user = await usersDB.getItem({ id: userId });
+        transportSettings[userId] = user?.transportModes || ['driving'];
+      } catch (error) {
+        console.error(`Error fetching transport settings for user ${userId}:`, error);
+        transportSettings[userId] = ['driving']; // Default fallback
+      }
+    }
+
+    res.json({
+      success: true,
+      data: transportSettings
+    });
+  } catch (error) {
+    console.error('Error fetching batch transport settings:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch transport settings',
+      message: error.message
+    });
+  }
+});
+
 module.exports = router;

@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, Modal, Pressable, ScrollView, Image } from 'react-native';
+import EventSchedule from './EventSchedule';
 
 type EventItem = {
 	id: string;
@@ -23,13 +24,27 @@ type Friend = {
 	name: string;
 	email?: string;
 	picture?: string;
+	lat?: number;
+	lng?: number;
+};
+
+type User = {
+	id: string;
+	name: string;
+	email?: string;
+	picture?: string;
+	lat?: number;
+	lng?: number;
+	latitude?: number;
+	longitude?: number;
 };
 
 interface EventPreviewModalProps {
 	visible: boolean;
 	event: EventItem | null;
 	friends: Friend[];
-	currentUserId?: string;
+	currentUser?: User;
+	token?: string;
 	onClose: () => void;
 	onEdit: (event: EventItem) => void;
 }
@@ -38,7 +53,8 @@ export default function EventPreviewModal({
 	visible,
 	event,
 	friends,
-	currentUserId,
+	currentUser,
+	token,
 	onClose,
 	onEdit
 }: EventPreviewModalProps) {
@@ -69,7 +85,7 @@ export default function EventPreviewModal({
 	};
 
 	const invitedFriends = getInvitedFriends();
-	const isCreator = currentUserId === event.createdBy;
+	const isCreator = currentUser?.id === event.createdBy;
 
 	return (
 		<Modal
@@ -130,14 +146,68 @@ export default function EventPreviewModal({
 						</Text>
 					</View>
 
-					{/* Invited Friends */}
+					{/* Participants */}
 					<View style={{ marginBottom: 20 }}>
 						<Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 8 }}>
-							Invited Friends ({invitedFriends.length})
+							Participants ({(currentUser ? 1 : 0) + invitedFriends.length})
 						</Text>
-						{invitedFriends.length > 0 ? (
-							<View style={{ backgroundColor: '#f8f9fa', borderRadius: 8, padding: 12 }}>
-								{invitedFriends.map((friend, index) => (
+						<View style={{ backgroundColor: '#f8f9fa', borderRadius: 8, padding: 12 }}>
+							{/* Current User (Event Creator) */}
+							{currentUser && (
+								<View style={{ 
+									flexDirection: 'row', 
+									alignItems: 'center', 
+									paddingVertical: 8,
+									borderBottomWidth: invitedFriends.length > 0 ? 1 : 0,
+									borderBottomColor: '#e9ecef',
+									backgroundColor: '#f0f9ff',
+									marginHorizontal: -12,
+									paddingHorizontal: 12,
+									borderRadius: 6
+								}}>
+									<View style={{ 
+										width: 32, 
+										height: 32, 
+										borderRadius: 16, 
+										backgroundColor: currentUser.picture ? "transparent" : "#1A73E8", 
+										justifyContent: 'center', 
+										alignItems: 'center', 
+										marginRight: 12,
+										overflow: "hidden",
+										borderWidth: 2,
+										borderColor: "#1A73E8"
+									}}>
+										{currentUser.picture ? (
+											<Image
+												source={{ uri: currentUser.picture }}
+												style={{ width: 28, height: 28, borderRadius: 14 }}
+											/>
+										) : (
+											<Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>
+												{currentUser.name.charAt(0).toUpperCase()}
+											</Text>
+										)}
+									</View>
+									<View style={{ flex: 1 }}>
+										<Text style={{ fontSize: 16, fontWeight: '600', color: '#333' }}>
+											{currentUser.name} {isCreator ? '(You - Creator)' : '(You)'}
+										</Text>
+										{currentUser.email && (
+											<Text style={{ fontSize: 14, color: '#6B7280' }}>
+												{currentUser.email}
+											</Text>
+										)}
+									</View>
+									{isCreator && (
+										<View style={{ paddingHorizontal: 8, paddingVertical: 4, backgroundColor: "#1A73E8", borderRadius: 12 }}>
+											<Text style={{ fontSize: 12, fontWeight: "600", color: "#fff" }}>Creator</Text>
+										</View>
+									)}
+								</View>
+							)}
+
+							{/* Other Participants */}
+							{invitedFriends.map((friend, index) => (
 									<View key={friend.id} style={{ 
 										flexDirection: 'row', 
 										alignItems: 'center', 
@@ -169,12 +239,27 @@ export default function EventPreviewModal({
 										<Text style={{ fontSize: 16, color: '#333' }}>{friend.name}</Text>
 									</View>
 								))}
-							</View>
-						) : (
-							<Text style={{ fontSize: 16, color: '#666', fontStyle: 'italic', padding: 12, backgroundColor: '#f8f9fa', borderRadius: 8 }}>
-								No friends invited
-							</Text>
-						)}
+						</View>
+					</View>
+
+					{/* Proposed Travel Schedules */}
+					<View style={{ marginBottom: 20 }}>
+						<EventSchedule
+							invitedFriends={[
+								...(currentUser ? [{
+									id: currentUser.id,
+									name: currentUser.name,
+									picture: currentUser.picture,
+									lat: currentUser.lat || currentUser.latitude,
+									lng: currentUser.lng || currentUser.longitude
+								}] : []),
+								...invitedFriends
+							]}
+							eventLocation={event.location}
+							eventStart={event.start}
+							eventEnd={event.end}
+							token={token}
+						/>
 					</View>
 
 					{/* Event Creator Info */}

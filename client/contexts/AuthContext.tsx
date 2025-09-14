@@ -64,6 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       const { latitude, longitude } = location.coords;
+      console.log(`Updating location for user ${userId}: lat=${latitude}, lng=${longitude}`);
 
       // Send location to server
       const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/users/${userId}/location`, {
@@ -81,6 +82,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const data = await response.json();
       if (data.success) {
         console.log('Location updated successfully');
+        
+        // Update local user object with new coordinates
+        setUser(prevUser => {
+          if (prevUser) {
+            const updatedUser = {
+              ...prevUser,
+              lat: latitude,
+              lng: longitude
+            };
+            // Also update AsyncStorage with new user data
+            AsyncStorage.setItem('userData', JSON.stringify(updatedUser)).catch(error => {
+              console.error('Error updating stored user data:', error);
+            });
+            return updatedUser;
+          }
+          return prevUser;
+        });
+        
         return true;
       } else {
         console.error('Failed to update location:', data.error);

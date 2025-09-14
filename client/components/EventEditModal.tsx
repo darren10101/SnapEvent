@@ -13,6 +13,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import { useAuth } from '../contexts/AuthContext';
+import EventSchedule from './EventSchedule';
 
 type EventItem = {
   id: string;
@@ -62,6 +64,7 @@ export default function EventEditModal({
   onSave,
 }: EventEditModalProps) {
   const insets = useSafeAreaInsets();
+  const { token, user } = useAuth();
   
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -369,23 +372,76 @@ export default function EventEditModal({
             </View>
           </View>
 
-          {/* Invite Friends */}
-          {friends.length > 0 && (
-            <View style={{ marginBottom: 24 }}>
-              <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 8 }}>
-                Invite Friends ({invitedFriends.size} selected)
-              </Text>
-              <View
-                style={{
-                  borderWidth: 1,
-                  borderColor: "#D1D5DB",
-                  borderRadius: 8,
-                  backgroundColor: "#fff",
-                  maxHeight: 200,
-                }}
-              >
-                <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled={true}>
-                  {friends.map((item) => (
+          {/* Participants */}
+          <View style={{ marginBottom: 24 }}>
+            <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 8 }}>
+              Participants ({invitedFriends.size + 1} total)
+            </Text>
+            <View
+              style={{
+                borderWidth: 1,
+                borderColor: "#D1D5DB",
+                borderRadius: 8,
+                backgroundColor: "#fff",
+                maxHeight: 200,
+              }}
+            >
+              <ScrollView style={{ maxHeight: 200 }} nestedScrollEnabled={true}>
+                {/* Current User (Event Creator) */}
+                {user && (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      padding: 12,
+                      borderBottomWidth: 1,
+                      borderBottomColor: "#F3F4F6",
+                      backgroundColor: "#F8F9FA",
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 16,
+                        backgroundColor: user.picture ? "transparent" : "#1A73E8",
+                        borderWidth: 2,
+                        borderColor: "#1A73E8",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginRight: 12,
+                        overflow: "hidden",
+                      }}
+                    >
+                      {user.picture ? (
+                        <Image
+                          source={{ uri: user.picture }}
+                          style={{ width: 28, height: 28, borderRadius: 14 }}
+                        />
+                      ) : (
+                        <Text style={{ fontSize: 12, fontWeight: "700", color: "#fff" }}>
+                          {user.name.charAt(0).toUpperCase()}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: "500" }}>
+                        {user.name} (You)
+                      </Text>
+                      {user.email && (
+                        <Text style={{ fontSize: 14, color: "#6B7280" }}>
+                          {user.email}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={{ paddingHorizontal: 8, paddingVertical: 4, backgroundColor: "#1A73E8", borderRadius: 12 }}>
+                      <Text style={{ fontSize: 12, fontWeight: "600", color: "#fff" }}>Creator</Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* Other Friends */}
+                {friends.map((item) => (
                     <Pressable
                       key={item.id}
                       onPress={() => toggleFriendInvite(item.id)}
@@ -439,6 +495,27 @@ export default function EventEditModal({
                   ))}
                 </ScrollView>
               </View>
+            </View>
+
+          {/* Travel Schedule */}
+          {event && (
+            <View style={{ marginBottom: 24 }}>
+              <EventSchedule
+                eventLocation={event.location}
+                eventStart={startDate.toISOString()}
+                eventEnd={endDate.toISOString()}
+                invitedFriends={[
+                  ...(user ? [{
+                    id: user.id,
+                    name: user.name,
+                    picture: user.picture,
+                    lat: user.lat || user.latitude,
+                    lng: user.lng || user.longitude
+                  }] : []),
+                  ...friends.filter(friend => Array.from(invitedFriends).includes(friend.id))
+                ]}
+                token={token || undefined}
+              />
             </View>
           )}
         </ScrollView>

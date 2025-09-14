@@ -319,12 +319,25 @@ class GoogleDirectionsService {
           endAddress: leg.end_address,
           startLocation: leg.start_location,
           endLocation: leg.end_location,
+          departureTime: leg.departure_time,
+          arrivalTime: leg.arrival_time,
           steps: leg.steps.map(step => ({
             distance: step.distance,
             duration: step.duration,
             instructions: step.html_instructions,
             maneuver: step.maneuver,
-            polyline: step.polyline.points
+            polyline: step.polyline.points,
+            travelMode: step.travel_mode,
+            // Include transit-specific timing and details
+            transitDetails: step.transit_details ? {
+              departureStop: step.transit_details.departure_stop,
+              arrivalStop: step.transit_details.arrival_stop,
+              departureTime: step.transit_details.departure_time,
+              arrivalTime: step.transit_details.arrival_time,
+              line: step.transit_details.line,
+              headsign: step.transit_details.headsign,
+              numStops: step.transit_details.num_stops
+            } : null
           }))
         }))
       })),
