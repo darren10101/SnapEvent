@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Modal, Pressable, ScrollView, Image } from 'react-native';
 import EventSchedule from './EventSchedule';
 
@@ -58,7 +58,57 @@ export default function EventPreviewModal({
 	onClose,
 	onEdit
 }: EventPreviewModalProps) {
+	const [participantUsers, setParticipantUsers] = useState<Record<string, User>>({});
+	const [loadingParticipants, setLoadingParticipants] = useState(false);
+
 	if (!event) return null;
+
+	// Fetch user details for unknown participants
+	useEffect(() => {
+		const fetchParticipantDetails = async () => {
+			if (!token || !event) return;
+			
+			const unknownParticipants = event.participants.filter(participantId => {
+				// Skip if it's current user or already in friends list or already fetched
+				return participantId !== currentUser?.id && 
+					   !friends.find(f => f.id === participantId) &&
+					   !participantUsers[participantId];
+			});
+
+			if (unknownParticipants.length === 0) return;
+
+			setLoadingParticipants(true);
+			try {
+				const userPromises = unknownParticipants.map(async (participantId) => {
+					const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/users/${participantId}`, {
+						headers: { 'Authorization': `Bearer ${token}` }
+					});
+					if (response.ok) {
+						const userData = await response.json();
+						return { id: participantId, user: userData.data };
+					}
+					return { id: participantId, user: null };
+				});
+
+				const results = await Promise.all(userPromises);
+				const newParticipantUsers: Record<string, User> = {};
+				
+				results.forEach(({ id, user }) => {
+					if (user) {
+						newParticipantUsers[id] = user;
+					}
+				});
+
+				setParticipantUsers(prev => ({ ...prev, ...newParticipantUsers }));
+			} catch (error) {
+				console.error('Error fetching participant details:', error);
+			} finally {
+				setLoadingParticipants(false);
+			}
+		};
+
+		fetchParticipantDetails();
+	}, [event?.participants, token, currentUser?.id, friends]);
 
 	const formatDateTime = (dateString: string) => {
 		const date = new Date(dateString);
@@ -79,9 +129,23 @@ export default function EventPreviewModal({
 
 	const getInvitedFriends = () => {
 		return event.participants
-			.filter(participantId => participantId !== event.createdBy)
-			.map(participantId => friends.find(friend => friend.id === participantId))
-			.filter((friend): friend is Friend => Boolean(friend));
+			.filter(participantId => participantId !== currentUser?.id) // Filter out current user
+			.map(participantId => {
+				// First try to find in friends list
+				const friend = friends.find(friend => friend.id === participantId);
+				if (friend) return friend;
+				
+				// Then try fetched participant users
+				const fetchedUser = participantUsers[participantId];
+				if (fetchedUser) return fetchedUser;
+				
+				// If still not found, create a placeholder (this will be replaced once data is fetched)
+				return {
+					id: participantId,
+					name: loadingParticipants ? 'Loading...' : `User ${participantId.slice(-4)}`,
+					email: ''
+				};
+			});
 	};
 
 	const invitedFriends = getInvitedFriends();
@@ -149,11 +213,11 @@ export default function EventPreviewModal({
 					{/* Participants */}
 					<View style={{ marginBottom: 20 }}>
 						<Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 8 }}>
-							Participants ({(currentUser ? 1 : 0) + invitedFriends.length})
+							Participants ({event.participants.length})
 						</Text>
 						<View style={{ backgroundColor: '#f8f9fa', borderRadius: 8, padding: 12 }}>
-							{/* Current User (Event Creator) */}
-							{currentUser && (
+							{/* Current User (if participating) */}
+							{currentUser && event.participants.includes(currentUser.id) && (
 								<View style={{ 
 									flexDirection: 'row', 
 									alignItems: 'center', 
