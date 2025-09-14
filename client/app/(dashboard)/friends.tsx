@@ -42,27 +42,27 @@ const FriendMarker: React.FC<{ friend: FriendItem }> = ({ friend }) => {
 	if (friend.picture) {
 		return (
 			<View style={{
-				width: 50,
-				height: 50,
-				borderRadius: 25,
+				width: 38,
+				height: 38,
+				borderRadius: 20,
 				backgroundColor: '#fff',
-				borderWidth: 3,
+				borderWidth: 2,
 				borderColor: '#10B981',
 				overflow: 'hidden',
 				alignItems: 'center',
 				justifyContent: 'center',
-				elevation: 5,
+				elevation: 4,
 				shadowColor: '#000',
-				shadowOpacity: 0.3,
-				shadowRadius: 5,
+				shadowOpacity: 0.25,
+				shadowRadius: 4,
 				shadowOffset: { width: 0, height: 2 }
 			}}>
 				<Image 
 					source={{ uri: friend.picture }} 
 					style={{ 
-						width: 44, 
-						height: 44, 
-						borderRadius: 22 
+						width: 34, 
+						height: 34, 
+						borderRadius: 18 
 					}} 
 				/>
 			</View>
@@ -70,22 +70,22 @@ const FriendMarker: React.FC<{ friend: FriendItem }> = ({ friend }) => {
 	} else {
 		return (
 			<View style={{
-				width: 50,
-				height: 50,
-				borderRadius: 25,
+				width: 38,
+				height: 38,
+				borderRadius: 20,
 				backgroundColor: '#10B981',
-				borderWidth: 3,
+				borderWidth: 2,
 				borderColor: '#fff',
 				alignItems: 'center',
 				justifyContent: 'center',
-				elevation: 5,
+				elevation: 4,
 				shadowColor: '#000',
-				shadowOpacity: 0.3,
-				shadowRadius: 5,
+				shadowOpacity: 0.25,
+				shadowRadius: 4,
 				shadowOffset: { width: 0, height: 2 }
 			}}>
 				<Text style={{ 
-					fontSize: 18, 
+					fontSize: 14, 
 					fontWeight: "700", 
 					color: "#fff" 
 				}}>
@@ -497,6 +497,7 @@ export default function FriendsScreen() {
 								}}
 								title={friend.name}
 								description={`📧 ${friend.email}`}
+								anchor={{ x: 0.5, y: 0.5 }}
 							>
 								<FriendMarker friend={friend} />
 							</Marker>

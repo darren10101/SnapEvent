@@ -23,7 +23,7 @@ function DraggableSheetInner({ children, collapsedHeight, topInset, containerSty
 	const maxTranslateY = Math.max(0, screenHeight - collapsedH); // 0 = expanded, maxTranslateY = collapsed
 	
 	// Add a third position - minimized (shows only the handle and a bit of content)
-	const minimizedTranslateY = maxTranslateY + 330; // 300px further down from collapsed
+	const minimizedTranslateY = maxTranslateY + 325; // 300px further down from collapsed
 	const absoluteMaxTranslateY = Math.min(minimizedTranslateY, screenHeight - expandedTop - 60); // Ensure at least 60px remains visible
 
 	const translateY = useRef(new Animated.Value(maxTranslateY)).current;

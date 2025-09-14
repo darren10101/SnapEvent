@@ -1,5 +1,5 @@
 import React, { useImperativeHandle, useRef, useState } from "react";
-import { View, TextInput, Pressable } from "react-native";
+import { View, TextInput, Pressable, FlatList, Text } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -7,31 +7,36 @@ import FriendPicker from "./FriendPicker";
 
 type Friend = { id: string; name: string; username?: string };
 
+type PlaceSuggestion = { id: string; primary: string; secondary?: string; placeId: string };
+
+type SelectedPlace = { lat: number; lng: number; description?: string };
+
 export type EventsSearchBarProps = {
 	navigateOnFocus?: boolean;
 	autoFocus?: boolean;
 	onFocus?: () => void;
 	onCreatePress?: () => void;
+	onFriendsSelected?: (friendIds: string[]) => void;
+	friendsList?: Friend[];
+	onPlaceSelected?: (place: SelectedPlace) => void;
 };
 
 export type EventsSearchBarHandle = {
 	focus: () => void;
 };
 
-const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarProps>(function EventsSearchBar({ navigateOnFocus = true, autoFocus = false, onFocus, onCreatePress }: EventsSearchBarProps, ref) {
+const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarProps>(function EventsSearchBar({ navigateOnFocus = true, autoFocus = false, onFocus, onCreatePress, onFriendsSelected, friendsList, onPlaceSelected }: EventsSearchBarProps, ref) {
 	const router = useRouter();
 	const insets = useSafeAreaInsets();
 	const inputRef = useRef<TextInput | null>(null);
 	const [showFriendPicker, setShowFriendPicker] = useState(false);
-	const [friends] = useState<Friend[]>([
-		{ id: "f1", name: "Alex Johnson", username: "alexj" },
-		{ id: "f2", name: "Brianna Lee", username: "brianna" },
-		{ id: "f3", name: "Carlos Mendoza", username: "carlos" },
-		{ id: "f4", name: "Dana Kapoor", username: "danak" },
-		{ id: "f5", name: "Evan Chen", username: "evanc" },
-		{ id: "f6", name: "Fatima Noor", username: "fatima" },
-	]);
+	const friends: Friend[] = friendsList ?? [];
 	const [invitedFriendIds, setInvitedFriendIds] = useState<Set<string>>(() => new Set());
+
+	const [query, setQuery] = useState("");
+	const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
+	const [isFetching, setIsFetching] = useState(false);
+	const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
 	const toggleInvite = (friendId: string) => {
 		setInvitedFriendIds(prev => {
@@ -52,6 +57,61 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 		focus: () => inputRef.current?.focus(),
 	}), []);
 
+	const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+	const fetchAutocomplete = async (text: string) => {
+		if (!apiKey) {
+			setSuggestions([]);
+			return;
+		}
+		if (!text.trim()) {
+			setSuggestions([]);
+			return;
+		}
+		try {
+			setIsFetching(true);
+			const res = await fetch(`https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(text)}&key=${apiKey}`);
+			const data = await res.json();
+			if (data.status === "OK" && Array.isArray(data.predictions)) {
+				const mapped: PlaceSuggestion[] = data.predictions.map((p: any) => ({
+					id: p.place_id,
+					primary: p.structured_formatting?.main_text || p.description,
+					secondary: p.structured_formatting?.secondary_text,
+					placeId: p.place_id,
+				}));
+				setSuggestions(mapped);
+			} else {
+				setSuggestions([]);
+			}
+		} catch (e) {
+			setSuggestions([]);
+		} finally {
+			setIsFetching(false);
+		}
+	};
+
+	const onChangeQuery = (text: string) => {
+		setQuery(text);
+		if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+		debounceTimerRef.current = setTimeout(() => fetchAutocomplete(text), 250);
+	};
+
+	const selectSuggestion = async (s: PlaceSuggestion) => {
+		if (!apiKey) return;
+		try {
+			const res = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?place_id=${s.placeId}&fields=geometry,name,formatted_address&key=${apiKey}`);
+			const data = await res.json();
+			const loc = data.result?.geometry?.location;
+			if (loc && typeof loc.lat === "number" && typeof loc.lng === "number") {
+				onPlaceSelected?.({ lat: loc.lat, lng: loc.lng, description: data.result?.name || data.result?.formatted_address || s.primary });
+				setSuggestions([]);
+				setQuery(s.primary);
+			}
+		} catch (e) {
+			// ignore
+		}
+	};
+
 	return (
 		<>
 			<View style={{ position: "absolute", top: insets.top + 12, left: 12, right: 12, backgroundColor: "#fff", borderRadius: 10, elevation: 3, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, paddingHorizontal: 12, paddingVertical: 10 }} pointerEvents="box-none">
@@ -62,6 +122,8 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 						style={{ flex: 1, marginRight: 8 }}
 						onFocus={() => { onFocus?.(); if (navigateOnFocus) goToCreate(); }}
 						autoFocus={autoFocus}
+						value={query}
+						onChangeText={onChangeQuery}
 					/>
 					<Pressable onPress={goToCreate} hitSlop={8} style={{ padding: 4 }}>
 						<Ionicons name="search" size={22} color="#1A73E8" />
@@ -72,6 +134,23 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 				</View>
 			</View>
 
+			{/* Autocomplete dropdown */}
+			{suggestions.length > 0 && !showFriendPicker ? (
+				<View style={{ position: "absolute", top: insets.top + 60, left: 12, right: 12, backgroundColor: "#fff", borderRadius: 10, elevation: 3, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 6, shadowOffset: { width: 0, height: 2 }, maxHeight: 260, overflow: "hidden" }}>
+					<FlatList
+						keyboardShouldPersistTaps="handled"
+						data={suggestions}
+						keyExtractor={(item) => item.id}
+						renderItem={({ item }) => (
+							<Pressable onPress={() => selectSuggestion(item)} style={{ paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderColor: "#F3F4F6" }}>
+								<Text style={{ fontSize: 15, fontWeight: "600" }}>{item.primary}</Text>
+								{item.secondary ? <Text style={{ color: "#6B7280" }}>{item.secondary}</Text> : null}
+							</Pressable>
+						)}
+					/>
+				</View>
+			) : null}
+
 			<FriendPicker
 				visible={showFriendPicker}
 				onClose={() => setShowFriendPicker(false)}
@@ -79,6 +158,7 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 				invitedFriendIds={invitedFriendIds}
 				onToggleInvite={toggleInvite}
 				topOffset={60}
+				onDone={(ids) => { onFriendsSelected?.(ids); }}
 			/>
 		</>
 	);
