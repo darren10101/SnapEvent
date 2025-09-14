@@ -11,9 +11,11 @@ export type AISuggestionsPopupProps = {
   topOffset?: number;
   isLoading?: boolean;
   error?: string | null;
+  aiReasoning?: string | null;
+  aiSummary?: string | null;
 };
 
-export default function AISuggestionsPopup({ visible, suggestions, onClose, onSelect, topOffset = 130, isLoading = false, error = null }: AISuggestionsPopupProps) {
+export default function AISuggestionsPopup({ visible, suggestions, onClose, onSelect, topOffset = 130, isLoading = false, error = null, aiReasoning = null, aiSummary = null }: AISuggestionsPopupProps) {
   if (!visible) return null;
 
   return (
@@ -25,15 +27,28 @@ export default function AISuggestionsPopup({ visible, suggestions, onClose, onSe
         </Pressable>
       </View>
 
-      {isLoading ? (
+
+      {aiSummary && (
+        <View style={{ padding: 12, borderBottomWidth: 1, borderColor: '#F3F4F6', backgroundColor: '#F9FAFB' }}>
+          <Text style={{ color: '#1A237E', fontWeight: 'bold' }}>{aiSummary}</Text>
+        </View>
+      )}
+
+      {aiReasoning && !aiSummary && (
+        <View style={{ padding: 12, borderBottomWidth: 1, borderColor: '#F3F4F6', backgroundColor: '#F9FAFB' }}>
+          <Text style={{ color: '#374151', fontStyle: 'italic' }}>{aiReasoning}</Text>
+        </View>
+      )}
+
+      {isLoading && !aiSummary ? (
         <View style={{ padding: 16 }}>
           <Text style={{ color: "#6B7280" }}>Generating suggestions...</Text>
         </View>
-      ) : error ? (
+      ) : error && !aiSummary ? (
         <View style={{ padding: 16 }}>
           <Text style={{ color: "#DC2626" }}>Error: {error}</Text>
         </View>
-      ) : suggestions.length === 0 ? (
+      ) : suggestions.length === 0 && !aiSummary ? (
         <View style={{ padding: 16 }}>
           <Text style={{ color: "#6B7280" }}>No suggestions yet</Text>
         </View>

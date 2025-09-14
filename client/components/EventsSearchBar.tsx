@@ -57,7 +57,9 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 	const [aiMode, setAiMode] = useState(false);
 	const [aiSubmitting, setAiSubmitting] = useState(false);
     const [aiSuggestionsVisible, setAiSuggestionsVisible] = useState(false);
-    const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([]);
+	const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([]);
+	const [aiReasoning, setAiReasoning] = useState<string | null>(null);
+	const [aiSummary, setAiSummary] = useState<string | null>(null);
     const [aiError, setAiError] = useState<string | null>(null);
 
 	const toggleInvite = (friendId: string) => {
@@ -177,8 +179,22 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 				if (res.ok && data.success) {
 					const suggestions: AISuggestion[] = data.data?.suggestions || [];
 					setAiSuggestions(Array.isArray(suggestions) ? suggestions : []);
+					// Try to extract AI reasoning/justification from response
+					let aiReason = null;
+					if (data.data?.finalResponse?.reasoning?.explanation) {
+						aiReason = data.data.finalResponse.reasoning.explanation;
+					} else if (data.data?.finalResponse?.text?.value) {
+						aiReason = data.data.finalResponse.text.value;
+					} else if (data.data?.finalResponse?.text) {
+						aiReason = data.data.finalResponse.text;
+					}
+					setAiReasoning(typeof aiReason === 'string' ? aiReason : null);
+					// Set summary paragraph if present
+					setAiSummary(data.data.out || data.summary || data.data?.summaryParagraph || null);
 				} else {
 					setAiSuggestions([]);
+					setAiReasoning(null);
+					setAiSummary(null);
 					setAiError(data.message || 'Failed to generate suggestions');
 				}
 			}
@@ -302,6 +318,8 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 				isLoading={aiSubmitting}
 				error={aiError}
 				topOffset={topBarOffset}
+				aiReasoning={aiReasoning}
+				aiSummary={aiSummary}
 			/>
 
 			<FriendPicker
