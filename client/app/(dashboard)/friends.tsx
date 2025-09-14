@@ -163,12 +163,17 @@ export default function FriendsScreen() {
 	const [isLoading, setIsLoading] = useState(false);
 	const [isFriendsLoading, setIsFriendsLoading] = useState(false);
 	const [activeTab, setActiveTab] = useState<'friends' | 'received' | 'sent'>('friends');
-	const [mapRegion, setMapRegion] = useState({
-		latitude: 37.7749, // Default to San Francisco
-		longitude: -122.4194,
+	const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+	
+	// Fallback location: University of Waterloo
+	const FALLBACK_LOCATION = {
+		latitude: 43.4723,
+		longitude: -80.5449,
 		latitudeDelta: 0.0922,
 		longitudeDelta: 0.0421,
-	});
+	};
+	
+	const [mapRegion, setMapRegion] = useState(FALLBACK_LOCATION);
 	const { user, token } = useAuth();
 	const { friendTravelTimes, calculateTravelTime, recalculateAllTravelTimes } = useFriendTravelTimes();
 	
@@ -180,6 +185,47 @@ export default function FriendsScreen() {
 	}, [friends, recalculateAllTravelTimes]);
 	
 	const { } = useTransportSettings(handleTransportModesChanged);
+
+	const fetchUserLocation = useCallback(async () => {
+		if (!user || !token) return;
+		
+		try {
+			const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/users/${user.id}`, {
+				headers: {
+					'Authorization': `Bearer ${token}`,
+				},
+			});
+
+			const data = await response.json();
+			if (data.success && data.data) {
+				const lat = data.data.lat || data.data.latitude;
+				const lng = data.data.lng || data.data.longitude;
+				
+				if (lat && lng) {
+					setUserLocation({ lat, lng });
+					
+					// Set the default map region to user's location if no friends are loaded yet
+					if (friends.length === 0) {
+						setMapRegion({
+							latitude: lat,
+							longitude: lng,
+							latitudeDelta: 0.0922,
+							longitudeDelta: 0.0421,
+						});
+					}
+				} else if (friends.length === 0) {
+					// If no user location and no friends, use fallback location
+					setMapRegion(FALLBACK_LOCATION);
+				}
+			}
+		} catch (error) {
+			console.error("Error fetching user location:", error);
+			// If error fetching user location and no friends loaded, use fallback
+			if (friends.length === 0) {
+				setMapRegion(FALLBACK_LOCATION);
+			}
+		}
+	}, [user, token]);
 
 	const fetchFriends = useCallback(async () => {
 		if (!user || !token) return;
@@ -230,7 +276,19 @@ export default function FriendsScreen() {
 		const friendsWithLocation = friendsList.filter(f => f.lat && f.lng);
 		
 		if (friendsWithLocation.length === 0) {
-			return; // Keep default region
+			// If no friends with location, center on user location if available
+			if (userLocation) {
+				setMapRegion({
+					latitude: userLocation.lat,
+					longitude: userLocation.lng,
+					latitudeDelta: 0.0922,
+					longitudeDelta: 0.0421,
+				});
+			} else {
+				// Use University of Waterloo as fallback when no user location and no friends
+				setMapRegion(FALLBACK_LOCATION);
+			}
+			return;
 		}
 
 		const latitudes = friendsWithLocation.map(f => f.lat!);
@@ -253,9 +311,10 @@ export default function FriendsScreen() {
 	};
 
 	useEffect(() => {
+		fetchUserLocation();
 		fetchFriendRequests();
 		fetchFriends();
-	}, [fetchFriendRequests, fetchFriends]);
+	}, [fetchUserLocation, fetchFriendRequests, fetchFriends]);
 
 	// Calculate travel times for friends when they are loaded
 	useEffect(() => {
@@ -267,7 +326,6 @@ export default function FriendsScreen() {
 			});
 		}
 	}, [friends, calculateTravelTime]);
-
 	const sendFriendRequest = async () => {
 		if (!emailInput.trim()) {
 			Alert.alert("Error", "Please enter an email address");
