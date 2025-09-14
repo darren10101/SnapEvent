@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import { View, Text, Pressable, TextInput, Alert, ScrollView, RefreshControl, Modal, Platform, Image } from "react-native";
+import { View, Text, Pressable, TextInput, Alert, ScrollView, RefreshControl, Modal, Platform, Image, useWindowDimensions } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MapView, { Marker } from "react-native-maps";
@@ -7,6 +7,7 @@ import DraggableSheet from "../../components/DraggableSheet";
 import { useAuth } from "../../contexts/AuthContext";
 import { useFriendTravelTimes } from "../../lib/hooks/useFriendTravelTimes";
 import { useTransportSettings } from "../../lib/hooks/useTransportSettings";
+import AddFriendModal from "../../components/AddFriendModal";
 
 type FriendItem = { 
 	id: string; 
@@ -155,6 +156,8 @@ const TravelTimeDisplay = ({ friendId, travelData }: { friendId: string, travelD
 
 export default function FriendsScreen() {
 	const insets = useSafeAreaInsets();
+	const { width } = useWindowDimensions();
+	const tabFontSize = width < 350 ? 10 : (width < 490 ? 12 : 14);
 	const [friends, setFriends] = useState<FriendItem[]>([]);
 	const [emailInput, setEmailInput] = useState("");
 	const [isAddingFriend, setIsAddingFriend] = useState(false);
@@ -408,6 +411,30 @@ export default function FriendsScreen() {
 		}
 	};
 
+	const handleCancelSentRequest = async (requestId: string) => {
+		if (!user || !token) return;
+		try {
+			const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/users/${user.id}/friend-requests/${requestId}`, {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json',
+					'Authorization': `Bearer ${token}`,
+				},
+				body: JSON.stringify({ action: 'cancel' })
+			});
+			const data = await response.json();
+			if (data.success) {
+				Alert.alert('Success', 'Friend request cancelled');
+				fetchFriendRequests();
+			} else {
+				Alert.alert('Error', data.error || 'Failed to cancel friend request');
+			}
+		} catch (error) {
+			console.error('Error cancelling friend request:', error);
+			Alert.alert('Error', 'Failed to cancel friend request. Please try again.');
+		}
+	};
+
 	const onAddFriend = useCallback(() => {
 		setShowAddFriend(true);
 	}, []);
@@ -469,8 +496,18 @@ export default function FriendsScreen() {
 						</View>
 					)}
 					{type === 'sent' && (
-						<View style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
-							<Text style={{ color: "#999", fontSize: 12 }}>Pending</Text>
+						<View style={{ flexDirection: 'row', gap: 8 }}>
+							<Pressable 
+								onPress={() => handleCancelSentRequest(request.id)}
+								style={{ 
+									backgroundColor: "#9CA3AF", 
+									paddingHorizontal: 12, 
+									paddingVertical: 6, 
+									borderRadius: 6 
+								}}
+							>
+								<Text style={{ color: "#fff", fontSize: 12, fontWeight: "600" }}>Cancel</Text>
+							</Pressable>
 						</View>
 					)}
 				</View>
@@ -536,7 +573,7 @@ export default function FriendsScreen() {
 							borderRadius: 6
 						}}
 					>
-						<Text style={{ fontWeight: activeTab === 'friends' ? '700' : '500', color: activeTab === 'friends' ? '#10B981' : '#666' }}>
+						<Text style={{ fontSize: tabFontSize, fontWeight: activeTab === 'friends' ? '700' : '500', color: activeTab === 'friends' ? '#10B981' : '#666' }}>
 							Friends ({friends.filter(f => f.lat && f.lng).length})
 						</Text>
 					</Pressable>
@@ -550,8 +587,8 @@ export default function FriendsScreen() {
 							borderRadius: 6
 						}}
 					>
-						<Text style={{ fontWeight: activeTab === 'received' ? '700' : '500', color: activeTab === 'received' ? '#10B981' : '#666' }}>
-							Received Requests ({friendRequests.received.length})
+						<Text style={{ fontSize: tabFontSize, fontWeight: activeTab === 'received' ? '700' : '500', color: activeTab === 'received' ? '#10B981' : '#666' }}>
+							Inbox ({friendRequests.received.length})
 						</Text>
 					</Pressable>
 					<Pressable 
@@ -564,8 +601,8 @@ export default function FriendsScreen() {
 							borderRadius: 6
 						}}
 					>
-						<Text style={{ fontWeight: activeTab === 'sent' ? '700' : '500', color: activeTab === 'sent' ? '#10B981' : '#666' }}>
-							Sent Requests ({friendRequests.sent.length})
+						<Text style={{ fontSize: tabFontSize, fontWeight: activeTab === 'sent' ? '700' : '500', color: activeTab === 'sent' ? '#10B981' : '#666' }}>
+							Sent ({friendRequests.sent.length})
 						</Text>
 					</Pressable>
 				</View>
@@ -692,98 +729,12 @@ export default function FriendsScreen() {
 				<Ionicons name="add" size={24} color="#fff" />
 			</Pressable>
 
-			{/* Add Friend Modal */}
-			<Modal
+			<AddFriendModal 
 				visible={showAddFriend}
-				transparent={true}
-				animationType="fade"
-				onRequestClose={() => setShowAddFriend(false)}
-			>
-				<View style={{ 
-					flex: 1, 
-					backgroundColor: 'rgba(0,0,0,0.5)', 
-					justifyContent: 'center', 
-					alignItems: 'center',
-					padding: 20
-				}}>
-					<View style={{ 
-						backgroundColor: '#fff', 
-						borderRadius: 12, 
-						padding: 20, 
-						width: '100%',
-						maxWidth: 400,
-						elevation: 5,
-						shadowColor: '#000',
-						shadowOpacity: 0.25,
-						shadowRadius: 10,
-						shadowOffset: { width: 0, height: 4 }
-					}}>
-						<View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-							<Text style={{ fontSize: 18, fontWeight: '700', color: '#10B981' }}>Add Friend</Text>
-							<Pressable 
-								onPress={() => setShowAddFriend(false)}
-								style={{ padding: 4 }}
-							>
-								<Ionicons name="close" size={24} color="#666" />
-							</Pressable>
-						</View>
-						
-						<Text style={{ fontSize: 14, color: '#666', marginBottom: 12 }}>
-							Enter the email address of the person you'd like to add as a friend.
-						</Text>
-						
-						<TextInput
-							placeholder="Enter email address"
-							value={emailInput}
-							onChangeText={setEmailInput}
-							style={{ 
-								backgroundColor: "#F5F5F5", 
-								borderRadius: 8, 
-								paddingHorizontal: 12, 
-								paddingVertical: 12,
-								borderWidth: 1,
-								borderColor: "#E5E7EB",
-								fontSize: 16,
-								marginBottom: 16
-							}}
-							keyboardType="email-address"
-							autoCapitalize="none"
-							autoFocus={true}
-						/>
-						
-						<View style={{ flexDirection: 'row', gap: 12 }}>
-							<Pressable 
-								onPress={() => setShowAddFriend(false)}
-								style={{ 
-									flex: 1,
-									backgroundColor: "#F3F4F6", 
-									paddingVertical: 12, 
-									borderRadius: 8,
-									alignItems: 'center'
-								}}
-							>
-								<Text style={{ color: "#666", fontSize: 16, fontWeight: "600" }}>Cancel</Text>
-							</Pressable>
-							
-							<Pressable 
-								onPress={sendFriendRequest} 
-								disabled={isAddingFriend || !emailInput.trim()}
-								style={{ 
-									flex: 1,
-									backgroundColor: (isAddingFriend || !emailInput.trim()) ? "#9CA3AF" : "#10B981", 
-									paddingVertical: 12, 
-									borderRadius: 8,
-									alignItems: 'center'
-								}}
-							>
-								<Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
-									{isAddingFriend ? "Sending..." : "Send Request"}
-								</Text>
-							</Pressable>
-						</View>
-					</View>
-				</View>
-			</Modal>
+				onClose={() => setShowAddFriend(false)}
+				onSubmit={async (email) => { setEmailInput(email); await sendFriendRequest(); }}
+				isSubmitting={isAddingFriend}
+			/>
 		</View>
 	);
 }

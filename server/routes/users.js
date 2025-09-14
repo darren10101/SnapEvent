@@ -776,16 +776,16 @@ router.get('/:googleId/friend-requests', authenticateToken, async (req, res) => 
 router.put('/:googleId/friend-requests/:requestId', authenticateToken, async (req, res) => {
   try {
     const { googleId, requestId } = req.params;
-    const { action } = req.body; // 'accept' or 'decline'
+    const { action } = req.body; // 'accept' or 'decline' or 'cancel'
 
-    if (!['accept', 'decline'].includes(action)) {
+    if (!['accept', 'decline', 'cancel'].includes(action)) {
       return res.status(400).json({
         success: false,
-        error: 'Action must be either "accept" or "decline"'
+        error: 'Action must be either "accept", "decline" or "cancel"'
       });
     }
 
-    // Get the user who is responding to the request
+    // Get the user performing the action
     const user = await usersDB.getItem({ id: googleId });
     if (!user) {
       return res.status(404).json({
@@ -794,10 +794,55 @@ router.put('/:googleId/friend-requests/:requestId', authenticateToken, async (re
       });
     }
 
-    // Find the friend request
+    // If cancelling a sent request
+    if (action === 'cancel') {
+      const sentRequests = user.sentFriendRequests || [];
+      const sentIndex = sentRequests.findIndex(req => req.id === requestId);
+      if (sentIndex === -1) {
+        return res.status(404).json({
+          success: false,
+          error: 'Sent friend request not found'
+        });
+      }
+
+      const sentRequest = sentRequests[sentIndex];
+      const targetUserId = sentRequest.to;
+      const targetUser = await usersDB.getItem({ id: targetUserId });
+      if (!targetUser) {
+        return res.status(404).json({
+          success: false,
+          error: 'Target user not found'
+        });
+      }
+
+      // Remove from sender's sent requests and target's received requests
+      const updatedSent = sentRequests.filter(req => req.id !== requestId);
+      const targetReceived = (targetUser.friendRequests || []).filter(req => req.id !== requestId);
+
+      await Promise.all([
+        usersDB.updateItem(
+          { id: googleId },
+          'SET sentFriendRequests = :sentFriendRequests',
+          { ':sentFriendRequests': updatedSent }
+        ),
+        usersDB.updateItem(
+          { id: targetUserId },
+          'SET friendRequests = :friendRequests',
+          { ':friendRequests': targetReceived }
+        )
+      ]);
+
+      return res.json({
+        success: true,
+        message: 'Friend request cancelled',
+        action: 'cancelled'
+      });
+    }
+
+    // From here on, handle received requests for accept/decline
     const friendRequests = user.friendRequests || [];
     const requestIndex = friendRequests.findIndex(req => req.id === requestId);
-    
+
     if (requestIndex === -1) {
       return res.status(404).json({
         success: false,
