@@ -99,8 +99,6 @@ export default function EventsScreen() {
 	const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | undefined>(undefined);
 	const [showEventCreation, setShowEventCreation] = useState(false);
 	const [eventCreationPlace, setEventCreationPlace] = useState<SelectedPlace>(null);
-	const [eventStartingLocation, setEventStartingLocation] = useState<SelectedPlace>(null);
-	const [isSelectingStartingLocation, setIsSelectingStartingLocation] = useState(false);
 	const [showEventPreview, setShowEventPreview] = useState(false);
 	const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
 	const [showEventEdit, setShowEventEdit] = useState(false);
@@ -190,8 +188,6 @@ export default function EventsScreen() {
 	const handleEventCancel = () => {
 		setShowEventCreation(false);
 		setEventCreationPlace(null);
-		setEventStartingLocation(null);
-		setIsSelectingStartingLocation(false);
 	};
 
 	const handleEventClick = (event: EventItem) => {
@@ -328,28 +324,16 @@ export default function EventsScreen() {
 		searchRef.current?.setQueryText(description);
 		searchRef.current?.focus();
 		// Set selected place and fit
-		if (isSelectingStartingLocation) {
-			setEventStartingLocation({ lat, lng, description });
-			setIsSelectingStartingLocation(false);
-			setShowEventCreation(true);
-		} else {
-			setSelectedPlace({ lat, lng, description });
-			setEventCreationPlace({ lat, lng, description });
-		}
+		setSelectedPlace({ lat, lng, description });
+		setEventCreationPlace({ lat, lng, description });
 		setFitSignal(s => s + 1);
 		} catch (e) {
 			console.warn('Reverse geocoding failed, using coordinates');
 			const description = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 			searchRef.current?.setQueryText(description);
 			searchRef.current?.focus();
-			if (isSelectingStartingLocation) {
-				setEventStartingLocation({ lat, lng, description });
-				setIsSelectingStartingLocation(false);
-				setShowEventCreation(true);
-			} else {
-				setSelectedPlace({ lat, lng, description });
-				setEventCreationPlace({ lat, lng, description });
-			}
+			setSelectedPlace({ lat, lng, description });
+			setEventCreationPlace({ lat, lng, description });
 			setFitSignal(s => s + 1);
 		}
 	};
@@ -381,14 +365,8 @@ export default function EventsScreen() {
 		}
 		searchRef.current?.setQueryText(description);
 		searchRef.current?.focus();
-		if (isSelectingStartingLocation) {
-			setEventStartingLocation({ lat, lng, description });
-			setIsSelectingStartingLocation(false);
-			setShowEventCreation(true);
-		} else {
-			setSelectedPlace({ lat, lng, description });
-			setEventCreationPlace({ lat, lng, description });
-		}
+		setSelectedPlace({ lat, lng, description });
+		setEventCreationPlace({ lat, lng, description });
 		setFitSignal(s => s + 1);
 	};
 
@@ -418,14 +396,9 @@ export default function EventsScreen() {
 						setFitSignal(s => s + 1);
 					}}
 					onPlaceSelected={(place) => {
-						if (isSelectingStartingLocation) {
-							setEventStartingLocation(place);
-							setIsSelectingStartingLocation(false);
-						} else {
-							setSelectedPlace(place);
-							setEventCreationPlace(place);
-							setShowEventCreation(true);
-						}
+						setSelectedPlace(place);
+						setEventCreationPlace(place);
+						setShowEventCreation(true);
 						setFitSignal(s => s + 1);
 					}}
 					onPlaceCleared={() => {
@@ -585,11 +558,6 @@ export default function EventsScreen() {
 				friends={friends}
 				currentUser={user || undefined}
 				onClose={handleEventCancel}
-				onSelectStartingLocation={() => {
-					setIsSelectingStartingLocation(true);
-					setShowEventCreation(false);
-				}}
-				selectedStartingLocation={eventStartingLocation}
 				token={token || undefined}
 				onSave={handleEventSave}
 			/>

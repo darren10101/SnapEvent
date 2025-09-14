@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import EventSchedule from "./EventSchedule";
+import DepartureLocationMap from "./DepartureLocationMap";
 
 type SelectedPlace = {
   lat: number;
@@ -47,8 +48,6 @@ export type EventCreationModalProps = {
   friends?: Friend[];
   currentUser?: User;
   onClose: () => void;
-  onSelectStartingLocation?: () => void;
-  selectedStartingLocation?: SelectedPlace | null;
   token?: string;
   onSave: (eventData: {
     title: string;
@@ -67,8 +66,6 @@ export default function EventCreationModal({
   friends = [],
   currentUser,
   onClose,
-  onSelectStartingLocation,
-  selectedStartingLocation,
   token,
   onSave,
 }: EventCreationModalProps) {
@@ -86,13 +83,7 @@ export default function EventCreationModal({
     new Set(currentUser ? [currentUser.id] : [])
   );
   const [startingLocation, setStartingLocation] = useState<SelectedPlace | null>(null);
-
-  // Update starting location when prop changes
-  useEffect(() => {
-    if (selectedStartingLocation) {
-      setStartingLocation(selectedStartingLocation);
-    }
-  }, [selectedStartingLocation]);
+  const [showDepartureMap, setShowDepartureMap] = useState(false);
 
   // Ensure current user is always included when modal opens or currentUser changes
   useEffect(() => {
@@ -114,6 +105,7 @@ export default function EventCreationModal({
     setShowEndPicker(false);
     setInvitedFriends(new Set(currentUser ? [currentUser.id] : []));
     setStartingLocation(null);
+    setShowDepartureMap(false);
   };
 
   const toggleFriendInvite = (friendId: string) => {
@@ -305,48 +297,87 @@ export default function EventCreationModal({
             <Text style={{ fontSize: 14, color: "#6B7280", marginBottom: 8 }}>
               Select where participants should start their journey from
             </Text>
-            {startingLocation ? (
-              <View
-                style={{
-                  backgroundColor: "#F3F4F6",
-                  padding: 16,
-                  borderRadius: 12,
-                  flexDirection: "row",
-                  alignItems: "center",
-                }}
-              >
-                <Ionicons name="location" size={20} color="#10B981" />
-                <View style={{ marginLeft: 12, flex: 1 }}>
-                  <Text style={{ fontSize: 16, fontWeight: "500" }}>
-                    {startingLocation.description || `${startingLocation.lat.toFixed(4)}, ${startingLocation.lng.toFixed(4)}`}
-                  </Text>
-                </View>
+            
+            {!showDepartureMap ? (
+              <>
+                {startingLocation ? (
+                  <View
+                    style={{
+                      backgroundColor: "#F3F4F6",
+                      padding: 16,
+                      borderRadius: 12,
+                      flexDirection: "row",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Ionicons name="location" size={20} color="#10B981" />
+                    <View style={{ marginLeft: 12, flex: 1 }}>
+                      <Text style={{ fontSize: 16, fontWeight: "500" }}>
+                        {startingLocation.description || `${startingLocation.lat.toFixed(4)}, ${startingLocation.lng.toFixed(4)}`}
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={() => setStartingLocation(null)}
+                      hitSlop={8}
+                      style={{ padding: 4, marginRight: 8 }}
+                    >
+                      <Ionicons name="close-circle" size={24} color="#6B7280" />
+                    </Pressable>
+                    <Pressable
+                      onPress={() => setShowDepartureMap(true)}
+                      hitSlop={8}
+                      style={{ padding: 4 }}
+                    >
+                      <Ionicons name="pencil" size={20} color="#6B7280" />
+                    </Pressable>
+                  </View>
+                ) : (
+                  <Pressable
+                    onPress={() => setShowDepartureMap(true)}
+                    style={{
+                      borderWidth: 1,
+                      borderColor: "#D1D5DB",
+                      borderRadius: 8,
+                      padding: 12,
+                      backgroundColor: "#fff",
+                      flexDirection: "row",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Ionicons name="add-circle-outline" size={20} color="#6B7280" />
+                    <Text style={{ marginLeft: 8, fontSize: 16, color: "#6B7280" }}>
+                      Select Starting Location
+                    </Text>
+                  </Pressable>
+                )}
+              </>
+            ) : (
+              <View style={{ marginBottom: 16 }}>
+                <DepartureLocationMap
+                  selectedLocation={startingLocation}
+                  onLocationSelected={(location) => {
+                    setStartingLocation(location);
+                    setShowDepartureMap(false);
+                  }}
+                  onLocationCleared={() => {
+                    setStartingLocation(null);
+                    setShowDepartureMap(false);
+                  }}
+                  height={300}
+                />
                 <Pressable
-                  onPress={() => setStartingLocation(null)}
-                  hitSlop={8}
-                  style={{ padding: 4 }}
+                  onPress={() => setShowDepartureMap(false)}
+                  style={{
+                    marginTop: 8,
+                    padding: 12,
+                    backgroundColor: "#F3F4F6",
+                    borderRadius: 8,
+                    alignItems: "center",
+                  }}
                 >
-                  <Ionicons name="close-circle" size={24} color="#6B7280" />
+                  <Text style={{ fontSize: 16, color: "#6B7280" }}>Cancel</Text>
                 </Pressable>
               </View>
-            ) : (
-              <Pressable
-                onPress={onSelectStartingLocation}
-                style={{
-                  borderWidth: 1,
-                  borderColor: "#D1D5DB",
-                  borderRadius: 8,
-                  padding: 12,
-                  backgroundColor: "#fff",
-                  flexDirection: "row",
-                  alignItems: "center",
-                }}
-              >
-                <Ionicons name="add-circle-outline" size={20} color="#6B7280" />
-                <Text style={{ marginLeft: 8, fontSize: 16, color: "#6B7280" }}>
-                  Select Starting Location
-                </Text>
-              </Pressable>
             )}
           </View>
 
@@ -455,7 +486,7 @@ export default function EventCreationModal({
           {/* Participants */}
           <View style={{ marginBottom: 24 }}>
             <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 8 }}>
-              Participants ({invitedFriends.size + 1} total)
+              Participants ({invitedFriends.size} total)
             </Text>
             <View
               style={{
