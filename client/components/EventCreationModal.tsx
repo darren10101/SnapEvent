@@ -58,6 +58,11 @@ export type EventCreationModalProps = {
     startingLocation?: SelectedPlace;
     invitedFriends: string[];
   }) => void;
+  initialTitle?: string;
+  initialDescription?: string;
+  initialStartDate?: Date;
+  initialEndDate?: Date;
+  initialInvitedFriendIds?: string[];
 };
 
 export default function EventCreationModal({
@@ -68,6 +73,11 @@ export default function EventCreationModal({
   onClose,
   token,
   onSave,
+  initialTitle,
+  initialDescription,
+  initialStartDate,
+  initialEndDate,
+  initialInvitedFriendIds,
 }: EventCreationModalProps) {
   const insets = useSafeAreaInsets();
   
@@ -95,6 +105,23 @@ export default function EventCreationModal({
       });
     }
   }, [currentUser?.id, visible]);
+
+  // Prefill fields when modal opens
+  useEffect(() => {
+    if (!visible) return;
+    if (initialTitle) setTitle(initialTitle);
+    if (initialDescription) setDescription(initialDescription);
+    if (initialStartDate) setStartDate(initialStartDate);
+    if (initialEndDate) setEndDate(initialEndDate);
+    if (Array.isArray(initialInvitedFriendIds) && initialInvitedFriendIds.length > 0) {
+      setInvitedFriends(prev => {
+        const next = new Set(prev);
+        for (const id of initialInvitedFriendIds) next.add(id);
+        if (currentUser?.id) next.add(currentUser.id);
+        return next;
+      });
+    }
+  }, [visible]);
 
   const resetForm = () => {
     setTitle("");

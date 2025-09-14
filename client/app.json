@@ -39,7 +39,6 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "SnapEvent needs your location to help you connect with friends and attend events nearby."
         }
       ]
     ],
@@ -50,7 +49,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "90022c1c-fff9-41cc-83bc-d0fe6132aea9"
+        "projectId": ""
       }
     },
     "owner": "stealthhydrac"
