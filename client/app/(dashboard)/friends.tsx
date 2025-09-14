@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { View, Text, Pressable, TextInput, Alert, ScrollView, RefreshControl, Modal, Platform, Image } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -164,6 +164,8 @@ export default function FriendsScreen() {
 	const [isFriendsLoading, setIsFriendsLoading] = useState(false);
 	const [activeTab, setActiveTab] = useState<'friends' | 'received' | 'sent'>('friends');
 	const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+	const mapRef = useRef<MapView | null>(null);
+	const [hasCentered, setHasCentered] = useState(false);
 	
 	// Fallback location: University of Waterloo
 	const FALLBACK_LOCATION = {
@@ -480,10 +482,26 @@ export default function FriendsScreen() {
 		<View style={{ flex: 1, paddingTop: insets.top + 8 }}>
 			<View style={{ flex: 1 }}>
 				<MapView
+					ref={(r) => { mapRef.current = r; }}
 					style={{ flex: 1 }}
 					initialRegion={mapRegion}
 					showsUserLocation={true}
 					showsMyLocationButton={true}
+					onUserLocationChange={(e) => {
+						const { coordinate } = e.nativeEvent;
+						if (coordinate?.latitude && coordinate?.longitude && !hasCentered) {
+							setHasCentered(true);
+							mapRef.current?.animateToRegion(
+								{
+									latitude: coordinate.latitude,
+									longitude: coordinate.longitude,
+									latitudeDelta: 0.01,
+									longitudeDelta: 0.01,
+								},
+								500
+							);
+						}
+					}}
 				>
 					{/* Display friends as markers */}
 					{friends
@@ -577,13 +595,26 @@ export default function FriendsScreen() {
 								<Text style={{ color: "#666", textAlign: 'center', paddingVertical: 20 }}>No friends yet. Send friend requests to get started!</Text>
 							) : (
 								friends.map((f) => (
-									<View key={f.id} style={{ 
-										paddingVertical: 12, 
-										borderBottomWidth: 1, 
-										borderColor: "#eee",
-										flexDirection: 'row',
-										alignItems: 'center'
-									}}>
+									<Pressable 
+										key={f.id}
+										onPress={() => {
+											if (f.lat && f.lng) {
+												mapRef.current?.animateToRegion({
+													latitude: f.lat,
+													longitude: f.lng,
+													latitudeDelta: 0.01,
+													longitudeDelta: 0.01,
+												}, 500);
+											}
+										}}
+										style={{ 
+											paddingVertical: 12, 
+											borderBottomWidth: 1, 
+											borderColor: "#eee",
+											flexDirection: 'row',
+											alignItems: 'center'
+										}}
+									>
 										{f.picture ? (
 											<Image 
 												source={{ uri: f.picture }} 
@@ -621,7 +652,7 @@ export default function FriendsScreen() {
 											friendId={f.id} 
 											travelData={friendTravelTimes.get(f.id)} 
 										/>
-									</View>
+									</Pressable>
 								))
 							)}
 						</>
