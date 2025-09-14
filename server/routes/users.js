@@ -98,7 +98,7 @@ router.get('/email/:email', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { googleId, email, name, picture, lat, lng, availability, friends } = req.body;
+    const { googleId, email, name, picture, lat, lng, availability, friends, transportModes } = req.body;
     
     // Basic validation
     if (!googleId || !email || !name) {
@@ -106,6 +106,17 @@ router.post('/', async (req, res) => {
         success: false,
         error: 'googleId, email, and name are required'
       });
+    }
+
+    // Validate transport modes if provided
+    const validTransportModes = ['walking', 'driving', 'transit', 'bicycling'];
+    let userTransportModes = ['driving']; // Default to driving
+    
+    if (transportModes && Array.isArray(transportModes)) {
+      const filteredModes = transportModes.filter(mode => validTransportModes.includes(mode));
+      if (filteredModes.length > 0) {
+        userTransportModes = [...new Set(filteredModes)]; // Remove duplicates
+      }
     }
 
     // Check if user already exists
@@ -127,6 +138,7 @@ router.post('/', async (req, res) => {
       lng: lng !== undefined ? parseFloat(lng) : null,
       availability: availability || [],
       friends: friends || [],
+      transportModes: userTransportModes,
       authProvider: 'google',
       createdAt: new Date().toISOString(),
       lastLogin: new Date().toISOString()
@@ -156,7 +168,7 @@ router.post('/', async (req, res) => {
 router.put('/:googleId', async (req, res) => {
   try {
     const { googleId } = req.params;
-    const { name, picture, lat, lng, availability, friends } = req.body;
+    const { name, picture, lat, lng, availability, friends, transportModes } = req.body;
 
     // Check if user exists
     const existingUser = await usersDB.getItem({ id: googleId });
@@ -204,6 +216,22 @@ router.put('/:googleId', async (req, res) => {
     if (friends) {
       updateParts.push('friends = :friends');
       expressionAttributeValues[':friends'] = friends;
+    }
+
+    if (transportModes) {
+      // Validate transport modes
+      const validTransportModes = ['walking', 'driving', 'transit', 'bicycling'];
+      let userTransportModes = transportModes;
+      
+      if (Array.isArray(transportModes)) {
+        const filteredModes = transportModes.filter(mode => validTransportModes.includes(mode));
+        userTransportModes = filteredModes.length > 0 ? [...new Set(filteredModes)] : ['driving'];
+      } else {
+        userTransportModes = ['driving']; // Default fallback
+      }
+      
+      updateParts.push('transportModes = :transportModes');
+      expressionAttributeValues[':transportModes'] = userTransportModes;
     }
 
     updateExpression = `SET ${updateParts.join(', ')}`;
@@ -861,6 +889,112 @@ router.put('/:googleId/friend-requests/:requestId', authenticateToken, async (re
     res.status(500).json({
       success: false,
       error: 'Failed to process friend request',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/users/:googleId/transport-settings
+ * Get user's transportation mode preferences
+ */
+router.get('/:googleId/transport-settings', authenticateToken, async (req, res) => {
+  try {
+    const { googleId } = req.params;
+    
+    // Get user data
+    const user = await usersDB.getItem({ id: googleId });
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    // Return transport modes or default to driving
+    const transportModes = user.transportModes || ['driving'];
+
+    res.json({
+      success: true,
+      data: {
+        transportModes,
+        primaryMode: transportModes[0] || 'driving'
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching transport settings:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch transport settings',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * PUT /api/users/:googleId/transport-settings
+ * Update user's transportation mode preferences
+ */
+router.put('/:googleId/transport-settings', authenticateToken, async (req, res) => {
+  try {
+    const { googleId } = req.params;
+    const { transportModes } = req.body;
+
+    // Validate input
+    if (!transportModes || !Array.isArray(transportModes) || transportModes.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'transportModes must be a non-empty array'
+      });
+    }
+
+    // Validate transport modes
+    const validTransportModes = ['walking', 'driving', 'transit', 'bicycling'];
+    const filteredModes = transportModes.filter(mode => validTransportModes.includes(mode));
+    
+    if (filteredModes.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid transport modes. Valid options: ${validTransportModes.join(', ')}`
+      });
+    }
+
+    // Remove duplicates
+    const uniqueModes = [...new Set(filteredModes)];
+
+    // Check if user exists
+    const existingUser = await usersDB.getItem({ id: googleId });
+    if (!existingUser) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    // Update transport modes
+    const updatedAttributes = await usersDB.updateItem(
+      { id: googleId },
+      'SET transportModes = :transportModes, lastLogin = :lastLogin',
+      {
+        ':transportModes': uniqueModes,
+        ':lastLogin': new Date().toISOString()
+      }
+    );
+
+    res.json({
+      success: true,
+      data: {
+        transportModes: uniqueModes,
+        primaryMode: uniqueModes[0]
+      },
+      message: 'Transport settings updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating transport settings:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update transport settings',
       message: error.message
     });
   }

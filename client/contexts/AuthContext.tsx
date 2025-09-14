@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import { syncTransportModes } from '../lib/transportSettings';
 
 export interface User {
   id: string;
@@ -120,6 +121,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(userData);
         // Start location tracking for returning user
         startLocationTracking(userData.id, storedToken);
+        
+        // Sync transport settings from server (don't block if this fails)
+        syncTransportModes().catch(error => {
+          console.warn('Failed to sync transport settings on app start:', error);
+        });
       }
     } catch (error) {
       console.error('Error loading stored auth:', error);
@@ -134,8 +140,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await AsyncStorage.setItem('userData', JSON.stringify(userData));
       setUser(userData);
       setToken(authToken);
+      
       // Start location tracking immediately after login
       startLocationTracking(userData.id, authToken);
+      
+      // Sync transport settings from server (don't block login if this fails)
+      syncTransportModes().catch(error => {
+        console.warn('Failed to sync transport settings on login:', error);
+      });
     } catch (error) {
       console.error('Error storing auth:', error);
       throw error;
