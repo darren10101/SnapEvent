@@ -211,20 +211,24 @@ export const generateUserTravelSchedule = async (
   eventStart: Date,
   eventEnd: Date,
   transportModes: TransportMode[],
-  token?: string
+  token?: string,
+  startingLocation?: { lat: number; lng: number }
 ): Promise<TravelSchedule | null> => {
-  if (!user.lat || !user.lng) {
-    console.warn(`User ${user.name} does not have location data`);
+  // Use starting location if provided, otherwise use user's home location
+  const originLocation = startingLocation || { lat: user.lat, lng: user.lng };
+  
+  if (!originLocation.lat || !originLocation.lng) {
+    console.warn(`User ${user.name} does not have location data and no starting location provided`);
     return null;
   }
 
   // Use primary transport mode (first in array)
   const primaryMode = transportModes[0] || 'driving';
-  console.log(`Generating schedule for ${user.name} using ${primaryMode}`);
+  console.log(`Generating schedule for ${user.name} using ${primaryMode}${startingLocation ? ' from custom starting location' : ' from home'}`);
 
   // Calculate outbound trip (to event) - arrive by event start time
   const outboundDirections = await calculateTravelDirections(
-    { lat: user.lat, lng: user.lng },
+    originLocation,
     eventLocation,
     primaryMode,
     { arrivalTime: eventStart }, // Use arrival time for transit scheduling
@@ -237,9 +241,16 @@ export const generateUserTravelSchedule = async (
   }
 
   // Calculate return trip (from event) - depart when event ends
+  // Always return to user's home location, not the starting location
+  const returnDestination = { lat: user.lat, lng: user.lng };
+  if (!returnDestination.lat || !returnDestination.lng) {
+    console.warn(`User ${user.name} does not have home location for return trip`);
+    return null;
+  }
+
   const returnDirections = await calculateTravelDirections(
     eventLocation,
-    { lat: user.lat, lng: user.lng },
+    returnDestination,
     primaryMode,
     { departureTime: eventEnd }, // Use departure time for return trip
     token
@@ -298,7 +309,8 @@ export const generateEventTravelSchedules = async (
   eventLocation: { lat: number; lng: number },
   eventStart: Date,
   eventEnd: Date,
-  token?: string
+  token?: string,
+  startingLocation?: { lat: number; lng: number }
 ): Promise<TravelSchedule[]> => {
   try {
     // Get transport settings for all users
@@ -309,7 +321,11 @@ export const generateEventTravelSchedules = async (
     const schedules: TravelSchedule[] = [];
     
     for (const friend of invitedFriends) {
-      if (friend.lat && friend.lng) {
+      // If starting location is provided, use it for all friends
+      // Otherwise, each friend needs their own home location
+      const hasValidOrigin = startingLocation || (friend.lat && friend.lng);
+      
+      if (hasValidOrigin) {
         const userTransportModes = transportSettings[friend.id] || ['driving'];
         const schedule = await generateUserTravelSchedule(
           friend,
@@ -317,7 +333,8 @@ export const generateEventTravelSchedules = async (
           eventStart,
           eventEnd,
           userTransportModes,
-          token
+          token,
+          startingLocation
         );
         
         if (schedule) {

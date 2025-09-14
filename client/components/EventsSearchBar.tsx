@@ -11,6 +11,8 @@ type PlaceSuggestion = { id: string; primary: string; secondary?: string; placeI
 
 type SelectedPlace = { lat: number; lng: number; description?: string };
 
+type QueryOrigin = 'user' | 'programmatic';
+
 export type EventsSearchBarProps = {
 	navigateOnFocus?: boolean;
 	autoFocus?: boolean;
@@ -19,14 +21,17 @@ export type EventsSearchBarProps = {
 	onFriendsSelected?: (friendIds: string[]) => void;
 	friendsList?: Friend[];
 	onPlaceSelected?: (place: SelectedPlace) => void;
+	onPlaceCleared?: () => void;
 	mapCenter?: { lat: number; lng: number };
+	onQueryChange?: (text: string, origin?: QueryOrigin) => void;
 };
 
 export type EventsSearchBarHandle = {
 	focus: () => void;
+	setQueryText: (text: string) => void;
 };
 
-const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarProps>(function EventsSearchBar({ navigateOnFocus = true, autoFocus = false, onFocus, onCreatePress, onFriendsSelected, friendsList, onPlaceSelected, mapCenter }: EventsSearchBarProps, ref) {
+const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarProps>(function EventsSearchBar({ navigateOnFocus = true, autoFocus = false, onFocus, onCreatePress, onFriendsSelected, friendsList, onPlaceSelected, onPlaceCleared, mapCenter, onQueryChange }: EventsSearchBarProps, ref) {
 	const router = useRouter();
 	const insets = useSafeAreaInsets();
 	const inputRef = useRef<TextInput | null>(null);
@@ -37,6 +42,7 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 	const [query, setQuery] = useState("");
 	const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
 	const [isFetching, setIsFetching] = useState(false);
+	const [hasSelectedPlace, setHasSelectedPlace] = useState(false);
 	const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
 	const toggleInvite = (friendId: string) => {
@@ -56,7 +62,16 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 
 	useImperativeHandle(ref, () => ({
 		focus: () => inputRef.current?.focus(),
-	}), []);
+		setQueryText: (text: string) => {
+			setQuery(text);
+			onQueryChange?.(text, 'programmatic');
+			// Mark that we have a selected place when setting text programmatically (e.g., from map tap/POI)
+			setHasSelectedPlace(true);
+			// Trigger autocomplete immediately for programmatic text so dropdown is ready
+			// Avoid debounce here to feel responsive
+			void fetchAutocomplete(text);
+		},
+	}), [onQueryChange]);
 
 	const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
@@ -107,6 +122,14 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 
 	const onChangeQuery = (text: string) => {
 		setQuery(text);
+		onQueryChange?.(text, 'user');
+		
+		// If user modifies text and we had a selected place, clear it
+		if (hasSelectedPlace) {
+			setHasSelectedPlace(false);
+			onPlaceCleared?.();
+		}
+		
 		if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
 		debounceTimerRef.current = setTimeout(() => fetchAutocomplete(text), 250);
 	};
@@ -122,9 +145,15 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 			if (data.status === "OK") {
 				const loc = data.result?.geometry?.location;
 				if (loc && typeof loc.lat === "number" && typeof loc.lng === "number") {
-					onPlaceSelected?.({ lat: loc.lat, lng: loc.lng, description: data.result?.name || data.result?.formatted_address || s.primary });
-					setSuggestions([]);
-					setQuery(s.primary);
+					// Use full address instead of just the name
+					const description = data.result?.formatted_address || data.result?.name || s.primary;
+					onPlaceSelected?.({ lat: loc.lat, lng: loc.lng, description });
+					// Mark that we have a selected place
+					setHasSelectedPlace(true);
+					// Don't clear suggestions - keep autocomplete enabled
+					setQuery(description);
+					// Re-fetch suggestions for the new query to keep autocomplete active
+					void fetchAutocomplete(description);
 				} else {
 					console.warn('Invalid location data received from Google Places API');
 				}

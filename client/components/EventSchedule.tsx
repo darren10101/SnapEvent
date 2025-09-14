@@ -86,6 +86,7 @@ interface EventScheduleProps {
   eventEnd: string;
   token?: string;
   isEditing?: boolean; // Add prop to know if event is being edited
+  startingLocation?: { lat: number; lng: number }; // Optional starting location
 }
 
 export default function EventSchedule({
@@ -95,7 +96,8 @@ export default function EventSchedule({
   eventStart,
   eventEnd,
   token,
-  isEditing = false
+  isEditing = false,
+  startingLocation
 }: EventScheduleProps) {
   const [schedules, setSchedules] = useState<TravelSchedule[]>([]);
   const [loading, setLoading] = useState(false);
@@ -108,7 +110,7 @@ export default function EventSchedule({
     if (invitedFriends.length > 0) {
       loadSchedules();
     }
-  }, [invitedFriends, eventLocation, eventStart, eventEnd, eventId]);
+  }, [invitedFriends, eventLocation, eventStart, eventEnd, eventId, startingLocation]);
 
   // Reset expanded states when user selection changes
   useEffect(() => {
@@ -157,7 +159,8 @@ export default function EventSchedule({
           eventLocation,
           startDate,
           endDate,
-          token
+          token,
+          startingLocation
         );
       }
 

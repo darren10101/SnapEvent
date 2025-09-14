@@ -99,6 +99,8 @@ export default function EventsScreen() {
 	const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | undefined>(undefined);
 	const [showEventCreation, setShowEventCreation] = useState(false);
 	const [eventCreationPlace, setEventCreationPlace] = useState<SelectedPlace>(null);
+	const [eventStartingLocation, setEventStartingLocation] = useState<SelectedPlace>(null);
+	const [isSelectingStartingLocation, setIsSelectingStartingLocation] = useState(false);
 	const [showEventPreview, setShowEventPreview] = useState(false);
 	const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
 	const [showEventEdit, setShowEventEdit] = useState(false);
@@ -132,6 +134,7 @@ export default function EventsScreen() {
 		startDate: Date;
 		endDate: Date;
 		location: SelectedPlace;
+		startingLocation?: SelectedPlace;
 		invitedFriends: string[];
 	}) => {
 		if (!user) {
@@ -187,6 +190,8 @@ export default function EventsScreen() {
 	const handleEventCancel = () => {
 		setShowEventCreation(false);
 		setEventCreationPlace(null);
+		setEventStartingLocation(null);
+		setIsSelectingStartingLocation(false);
 	};
 
 	const handleEventClick = (event: EventItem) => {
@@ -296,6 +301,85 @@ export default function EventsScreen() {
 		);
 	}, [allEvents, user?.id]);
 
+	const handleMapPress = async (lat: number, lng: number) => {
+		try {
+			const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+			let description = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+			if (apiKey) {
+				const res = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`);
+				const data = await res.json();
+				if (data.status === 'OK' && data.results && data.results.length > 0) {
+					description = data.results[0].formatted_address || description;
+				}
+			}
+		// Update search bar text and focus
+		searchRef.current?.setQueryText(description);
+		searchRef.current?.focus();
+		// Set selected place and fit
+		if (isSelectingStartingLocation) {
+			setEventStartingLocation({ lat, lng, description });
+			setIsSelectingStartingLocation(false);
+			setShowEventCreation(true);
+		} else {
+			setSelectedPlace({ lat, lng, description });
+			setEventCreationPlace({ lat, lng, description });
+		}
+		setFitSignal(s => s + 1);
+		} catch (e) {
+			console.warn('Reverse geocoding failed, using coordinates');
+			const description = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+			searchRef.current?.setQueryText(description);
+			searchRef.current?.focus();
+			if (isSelectingStartingLocation) {
+				setEventStartingLocation({ lat, lng, description });
+				setIsSelectingStartingLocation(false);
+				setShowEventCreation(true);
+			} else {
+				setSelectedPlace({ lat, lng, description });
+				setEventCreationPlace({ lat, lng, description });
+			}
+			setFitSignal(s => s + 1);
+		}
+	};
+
+	const handlePoiPress = async (poi: { lat: number; lng: number; name?: string; placeId?: string }) => {
+		const { lat, lng, name, placeId } = poi;
+		const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+		let description = name || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+		try {
+			if (apiKey) {
+				if (placeId) {
+					const detailsRes = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,geometry&key=${apiKey}`);
+					const details = await detailsRes.json();
+					if (details.status === 'OK') {
+						// Use full address instead of just the name
+						description = details.result?.formatted_address || details.result?.name || description;
+					}
+				} else {
+					const geoRes = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`);
+					const geo = await geoRes.json();
+					if (geo.status === 'OK' && geo.results && geo.results.length > 0) {
+						// Use full address instead of just the name
+						description = geo.results[0].formatted_address || description;
+					}
+				}
+			}
+		} catch (e) {
+			// Fallback to coordinates with name if API fails
+		}
+		searchRef.current?.setQueryText(description);
+		searchRef.current?.focus();
+		if (isSelectingStartingLocation) {
+			setEventStartingLocation({ lat, lng, description });
+			setIsSelectingStartingLocation(false);
+			setShowEventCreation(true);
+		} else {
+			setSelectedPlace({ lat, lng, description });
+			setEventCreationPlace({ lat, lng, description });
+		}
+		setFitSignal(s => s + 1);
+	};
+
 	return (
 		<View style={{ flex: 1, backgroundColor: "transparent" }}>
 			<EventsMap 
@@ -303,6 +387,8 @@ export default function EventsScreen() {
 				fitSignal={fitSignal} 
 				selectedPlace={selectedPlace ?? undefined} 
 				onMapCenterChange={setMapCenter}
+				onMapPress={handleMapPress}
+				onPoiPress={handlePoiPress}
 			/>
 			<View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} pointerEvents="box-none">
 				<EventsSearchBar
@@ -320,10 +406,19 @@ export default function EventsScreen() {
 						setFitSignal(s => s + 1);
 					}}
 					onPlaceSelected={(place) => {
-						setSelectedPlace(place);
-						setEventCreationPlace(place);
-						setShowEventCreation(true);
+						if (isSelectingStartingLocation) {
+							setEventStartingLocation(place);
+							setIsSelectingStartingLocation(false);
+						} else {
+							setSelectedPlace(place);
+							setEventCreationPlace(place);
+							setShowEventCreation(true);
+						}
 						setFitSignal(s => s + 1);
+					}}
+					onPlaceCleared={() => {
+						setSelectedPlace(null);
+						setEventCreationPlace(null);
 					}}
 				/>
 				<DraggableSheet ref={sheetRef}>
@@ -409,6 +504,12 @@ export default function EventsScreen() {
 				selectedPlace={eventCreationPlace}
 				friends={friends}
 				onClose={handleEventCancel}
+				onSelectStartingLocation={() => {
+					setIsSelectingStartingLocation(true);
+					setShowEventCreation(false);
+				}}
+				selectedStartingLocation={eventStartingLocation}
+				token={token || undefined}
 				onSave={handleEventSave}
 			/>
 

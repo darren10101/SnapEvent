@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import Ionicons from "@expo/vector-icons/Ionicons";
+import EventSchedule from "./EventSchedule";
 
 type SelectedPlace = {
   lat: number;
@@ -25,6 +26,8 @@ type Friend = {
   name: string;
   email?: string;
   picture?: string;
+  lat?: number;
+  lng?: number;
 };
 
 export type EventCreationModalProps = {
@@ -32,12 +35,16 @@ export type EventCreationModalProps = {
   selectedPlace: SelectedPlace | null;
   friends?: Friend[];
   onClose: () => void;
+  onSelectStartingLocation?: () => void;
+  selectedStartingLocation?: SelectedPlace | null;
+  token?: string;
   onSave: (eventData: {
     title: string;
     description: string;
     startDate: Date;
     endDate: Date;
     location: SelectedPlace;
+    startingLocation?: SelectedPlace;
     invitedFriends: string[];
   }) => void;
 };
@@ -47,6 +54,9 @@ export default function EventCreationModal({
   selectedPlace,
   friends = [],
   onClose,
+  onSelectStartingLocation,
+  selectedStartingLocation,
+  token,
   onSave,
 }: EventCreationModalProps) {
   const insets = useSafeAreaInsets();
@@ -60,6 +70,14 @@ export default function EventCreationModal({
   const [startPickerMode, setStartPickerMode] = useState<"date" | "time">("date");
   const [endPickerMode, setEndPickerMode] = useState<"date" | "time">("date");
   const [invitedFriends, setInvitedFriends] = useState<Set<string>>(new Set());
+  const [startingLocation, setStartingLocation] = useState<SelectedPlace | null>(null);
+
+  // Update starting location when prop changes
+  useEffect(() => {
+    if (selectedStartingLocation) {
+      setStartingLocation(selectedStartingLocation);
+    }
+  }, [selectedStartingLocation]);
 
   const resetForm = () => {
     setTitle("");
@@ -69,6 +87,7 @@ export default function EventCreationModal({
     setShowStartPicker(false);
     setShowEndPicker(false);
     setInvitedFriends(new Set());
+    setStartingLocation(null);
   };
 
   const toggleFriendInvite = (friendId: string) => {
@@ -108,6 +127,7 @@ export default function EventCreationModal({
       startDate,
       endDate,
       location: selectedPlace,
+      startingLocation: startingLocation || undefined,
       invitedFriends: Array.from(invitedFriends),
     });
 
@@ -244,6 +264,59 @@ export default function EventCreationModal({
                 minHeight: 100,
               }}
             />
+          </View>
+
+          {/* Optional Starting Location */}
+          <View style={{ marginBottom: 24 }}>
+            <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 8 }}>
+              Starting Location (Optional)
+            </Text>
+            <Text style={{ fontSize: 14, color: "#6B7280", marginBottom: 8 }}>
+              Select where participants should start their journey from
+            </Text>
+            {startingLocation ? (
+              <View
+                style={{
+                  backgroundColor: "#F3F4F6",
+                  padding: 16,
+                  borderRadius: 12,
+                  flexDirection: "row",
+                  alignItems: "center",
+                }}
+              >
+                <Ionicons name="location" size={20} color="#10B981" />
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                  <Text style={{ fontSize: 16, fontWeight: "500" }}>
+                    {startingLocation.description || `${startingLocation.lat.toFixed(4)}, ${startingLocation.lng.toFixed(4)}`}
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => setStartingLocation(null)}
+                  hitSlop={8}
+                  style={{ padding: 4 }}
+                >
+                  <Ionicons name="close-circle" size={24} color="#6B7280" />
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable
+                onPress={onSelectStartingLocation}
+                style={{
+                  borderWidth: 1,
+                  borderColor: "#D1D5DB",
+                  borderRadius: 8,
+                  padding: 12,
+                  backgroundColor: "#fff",
+                  flexDirection: "row",
+                  alignItems: "center",
+                }}
+              >
+                <Ionicons name="add-circle-outline" size={20} color="#6B7280" />
+                <Text style={{ marginLeft: 8, fontSize: 16, color: "#6B7280" }}>
+                  Select Starting Location
+                </Text>
+              </Pressable>
+            )}
           </View>
 
           {/* Start Date & Time */}
@@ -418,6 +491,24 @@ export default function EventCreationModal({
                   ))}
                 </ScrollView>
               </View>
+            </View>
+          )}
+
+          {/* Travel Schedule Preview */}
+          {invitedFriends.size > 0 && selectedPlace && (
+            <View style={{ marginBottom: 24 }}>
+              <EventSchedule
+                invitedFriends={friends.filter(friend => invitedFriends.has(friend.id)).map(friend => ({
+                  ...friend,
+                  lat: friend.lat,
+                  lng: friend.lng
+                }))}
+                eventLocation={selectedPlace}
+                eventStart={startDate.toISOString()}
+                eventEnd={endDate.toISOString()}
+                startingLocation={startingLocation || undefined}
+                token={token}
+              />
             </View>
           )}
         </ScrollView>

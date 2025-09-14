@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View, Image, Text } from "react-native";
-import MapView, { Marker, Region } from "react-native-maps";
+import MapView, { Marker, Region, MapPressEvent, PoiClickEvent } from "react-native-maps";
 
 export type FriendLocation = { id: string; name: string; lat: number; lng: number; picture?: string };
 
@@ -8,10 +8,12 @@ export type EventsMapProps = {
 	friendLocations?: FriendLocation[];
 	selectedPlace?: { lat: number; lng: number; description?: string } | null;
 	fitSignal?: number; // increment to trigger fit to markers (user + friends + selected place)
+	onMapPress?: (lat: number, lng: number) => void;
 	onMapCenterChange?: (center: { lat: number; lng: number }) => void;
+	onPoiPress?: (poi: { lat: number; lng: number; name?: string; placeId?: string }) => void;
 };
 
-export default function EventsMap({ friendLocations = [], selectedPlace = null, fitSignal = 0, onMapCenterChange }: EventsMapProps) {
+export default function EventsMap({ friendLocations = [], selectedPlace = null, fitSignal = 0, onMapPress, onMapCenterChange, onPoiPress }: EventsMapProps) {
 	const mapRef = useRef<MapView | null>(null);
 	const [hasCentered, setHasCentered] = useState(false);
 	const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -97,6 +99,20 @@ export default function EventsMap({ friendLocations = [], selectedPlace = null, 
 		);
 	};
 
+	const handleMapPress = (e: MapPressEvent) => {
+		const { coordinate } = e.nativeEvent;
+		if (coordinate?.latitude && coordinate?.longitude) {
+			onMapPress?.(coordinate.latitude, coordinate.longitude);
+		}
+	};
+
+	const handlePoiClick = (e: PoiClickEvent) => {
+		const { coordinate, name, placeId } = e.nativeEvent;
+		if (coordinate?.latitude && coordinate?.longitude) {
+			onPoiPress?.({ lat: coordinate.latitude, lng: coordinate.longitude, name, placeId });
+		}
+	};
+
 	return (
 		<View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
 			<MapView
@@ -111,8 +127,9 @@ export default function EventsMap({ friendLocations = [], selectedPlace = null, 
 				rotateEnabled={true}
 				pitchEnabled={true}
 				zoomControlEnabled={true}
+				onPress={handleMapPress}
+				onPoiClick={handlePoiClick}
 				onRegionChangeComplete={(region) => {
-					// Provide the current map center for location-aware search
 					onMapCenterChange?.({ lat: region.latitude, lng: region.longitude });
 				}}
 				onUserLocationChange={(e) => {
