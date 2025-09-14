@@ -153,7 +153,7 @@ export default function DepartureLocationMap({
           borderBottomColor: "#e5e7eb",
         }}
       >
-        <Text style={{ fontSize: 16, fontWeight: "600" }}>Select Departure Location</Text>
+        <Text style={{ fontSize: 16, fontWeight: "600" }}>Select Your Departure Location</Text>
         {selectedLocation && (
           <TouchableOpacity
             onPress={onLocationCleared}
@@ -210,8 +210,8 @@ export default function DepartureLocationMap({
           {selectedLocation && (
             <Marker
               coordinate={{ latitude: selectedLocation.lat, longitude: selectedLocation.lng }}
-              title="Departure Location"
-              description={selectedLocation.description || "Selected departure point"}
+              title="Your Departure Location"
+              description={selectedLocation.description || "Your selected departure point"}
               pinColor="#10B981"
             />
           )}
@@ -310,7 +310,7 @@ export default function DepartureLocationMap({
             }}
           >
             <Text style={{ color: "#fff", fontSize: 14, textAlign: "center" }}>
-              Tap on the map or a place to select departure location
+              Tap on the map or a place to select your departure location
             </Text>
           </View>
         )}
@@ -335,7 +335,7 @@ export default function DepartureLocationMap({
             }}
           >
             <Text style={{ fontSize: 14, fontWeight: "500", color: "#333", marginBottom: 2 }}>
-              Departure Location
+              Your Departure Location
             </Text>
             <Text style={{ fontSize: 12, color: "#666" }}>
               {selectedLocation.description || `${selectedLocation.lat.toFixed(4)}, ${selectedLocation.lng.toFixed(4)}`}

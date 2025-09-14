@@ -292,10 +292,10 @@ export default function EventCreationModal({
           {/* Optional Starting Location */}
           <View style={{ marginBottom: 24 }}>
             <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 8 }}>
-              Starting Location (Optional)
+              Your Starting Location (Optional)
             </Text>
             <Text style={{ fontSize: 14, color: "#6B7280", marginBottom: 8 }}>
-              Select where participants should start their journey from
+              Select where you will start your journey from. Other participants will use their own locations.
             </Text>
             
             {!showDepartureMap ? (
@@ -346,7 +346,7 @@ export default function EventCreationModal({
                   >
                     <Ionicons name="add-circle-outline" size={20} color="#6B7280" />
                     <Text style={{ marginLeft: 8, fontSize: 16, color: "#6B7280" }}>
-                      Select Starting Location
+                      Select Your Starting Location
                     </Text>
                   </Pressable>
                 )}
@@ -617,8 +617,8 @@ export default function EventCreationModal({
                     id: currentUser.id,
                     name: currentUser.name,
                     picture: currentUser.picture,
-                    lat: currentUser.lat || currentUser.latitude,
-                    lng: currentUser.lng || currentUser.longitude
+                    lat: startingLocation ? startingLocation.lat : (currentUser.lat || currentUser.latitude),
+                    lng: startingLocation ? startingLocation.lng : (currentUser.lng || currentUser.longitude)
                   }] : []),
                   ...friends.filter(friend => invitedFriends.has(friend.id)).map(friend => ({
                     ...friend,
@@ -629,7 +629,6 @@ export default function EventCreationModal({
                 eventLocation={selectedPlace}
                 eventStart={startDate.toISOString()}
                 eventEnd={endDate.toISOString()}
-                startingLocation={startingLocation || undefined}
                 token={token}
               />
             </View>
