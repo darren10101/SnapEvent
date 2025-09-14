@@ -43,7 +43,7 @@ export default function FriendPicker({ visible, onClose, friends, invitedFriendI
 
 		setIsAddingFriend(true);
 		try {
-			const response = await fetch(`http://10.37.96.184:3000/api/users/${user.id}/friend-request`, {
+			const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/users/${user.id}/friend-request`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',

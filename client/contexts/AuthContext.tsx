@@ -62,7 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { latitude, longitude } = location.coords;
 
       // Send location to server
-      const response = await fetch(`http://10.37.96.184:3000/api/users/${userId}/location`, {
+      const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/users/${userId}/location`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

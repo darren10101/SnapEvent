@@ -51,7 +51,7 @@ export async function signupWithEmail(_credentials: Credentials): Promise<void> 
 /**
  * Configuration constants
  */
-const IP_ADDRESS = process.env.EXPO_PUBLIC_IP_ADDRESS || '10.37.96.184'; // Fallback IP address
+const IP_ADDRESS = process.env.EXPO_PUBLIC_IP_ADDRESS;
 const SERVER_PORT = process.env.EXPO_PUBLIC_SERVER_PORT || '3000';
 const SERVER_URL = process.env.EXPO_PUBLIC_SERVER_URL || `http://${IP_ADDRESS}.nip.io:${SERVER_PORT}`;
 

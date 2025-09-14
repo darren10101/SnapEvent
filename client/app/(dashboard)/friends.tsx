@@ -117,7 +117,7 @@ export default function FriendsScreen() {
 		
 		setIsFriendsLoading(true);
 		try {
-			const response = await fetch(`http://10.37.96.184:3000/api/users/${user.id}/friends`, {
+			const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/users/${user.id}/friends`, {
 				headers: {
 					'Authorization': `Bearer ${token}`,
 				},
@@ -140,7 +140,7 @@ export default function FriendsScreen() {
 		
 		setIsLoading(true);
 		try {
-			const response = await fetch(`http://10.37.96.184:3000/api/users/${user.id}/friend-requests`, {
+			const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/users/${user.id}/friend-requests`, {
 				headers: {
 					'Authorization': `Bearer ${token}`,
 				},
@@ -207,7 +207,7 @@ export default function FriendsScreen() {
 
 		setIsAddingFriend(true);
 		try {
-			const response = await fetch(`http://10.37.96.184:3000/api/users/${user.id}/friend-request`, {
+			const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/users/${user.id}/friend-request`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
@@ -241,7 +241,7 @@ export default function FriendsScreen() {
 		if (!user || !token) return;
 
 		try {
-			const response = await fetch(`http://10.37.96.184:3000/api/users/${user.id}/friend-requests/${requestId}`, {
+			const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/users/${user.id}/friend-requests/${requestId}`, {
 				method: 'PUT',
 				headers: {
 					'Content-Type': 'application/json',
