@@ -1,11 +1,15 @@
 const express = require('express');
 const DynamoDBService = require('../services/dynamodb');
+const GoogleDirectionsService = require('../services/googleDirections');
 const { authenticateToken, requireOwnership, optionalAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
 // Initialize DynamoDB service for users table
 const usersDB = new DynamoDBService(process.env.USERS_TABLE || 'snapevent-users');
+
+// Initialize Google Directions service
+const directionsService = new GoogleDirectionsService();
 
 /**
  * GET /api/users
@@ -995,6 +999,199 @@ router.put('/:googleId/transport-settings', authenticateToken, async (req, res) 
     res.status(500).json({
       success: false,
       error: 'Failed to update transport settings',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/users/:googleId/travel-time
+ * Calculate travel time from current user to another user using user's enabled transport modes
+ * Body: { targetUserId }
+ */
+router.post('/:googleId/travel-time', authenticateToken, requireOwnership, async (req, res) => {
+  try {
+    const { googleId } = req.params;
+    const { targetUserId } = req.body;
+
+    if (!targetUserId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Target user ID is required'
+      });
+    }
+
+    // Get current user location
+    const currentUser = await usersDB.getItem({ id: googleId });
+    if (!currentUser) {
+      return res.status(404).json({
+        success: false,
+        error: 'Current user not found'
+      });
+    }
+
+    console.log('Current user data:', currentUser);
+
+    // Check if current user has location data
+    const currentLat = currentUser.latitude || currentUser.lat;
+    const currentLng = currentUser.longitude || currentUser.lng;
+    
+    if (!currentLat || !currentLng) {
+      return res.status(400).json({
+        success: false,
+        error: 'Current user location not available',
+        debug: {
+          latitude: currentUser.latitude,
+          longitude: currentUser.longitude,
+          lat: currentUser.lat,
+          lng: currentUser.lng
+        }
+      });
+    }
+
+    // Get target user location
+    const targetUser = await usersDB.getItem({ id: targetUserId });
+    if (!targetUser) {
+      return res.status(404).json({
+        success: false,
+        error: 'Target user not found'
+      });
+    }
+
+    console.log('Target user data:', targetUser);
+
+    // Check if target user has location data
+    const targetLat = targetUser.latitude || targetUser.lat;
+    const targetLng = targetUser.longitude || targetUser.lng;
+    
+    if (!targetLat || !targetLng) {
+      return res.status(400).json({
+        success: false,
+        error: 'Target user location not available',
+        debug: {
+          latitude: targetUser.latitude,
+          longitude: targetUser.longitude,
+          lat: targetUser.lat,
+          lng: targetUser.lng
+        }
+      });
+    }
+
+    const origin = `${currentLat},${currentLng}`;
+    const destination = `${targetLat},${targetLng}`;
+
+    // Get user's enabled transport modes from their profile settings
+    let userTransportModes = ['driving']; // Default fallback
+    
+    try {
+      if (currentUser.transportModes && Array.isArray(currentUser.transportModes)) {
+        userTransportModes = currentUser.transportModes;
+      }
+      
+      console.log('User transport modes from profile:', userTransportModes);
+      
+      // Validate that we have at least one transport mode
+      if (userTransportModes.length === 0) {
+        userTransportModes = ['driving']; // Fallback to driving if no modes enabled
+      }
+    } catch (error) {
+      console.error('Error reading user transport settings:', error);
+      userTransportModes = ['driving']; // Fallback on error
+    }
+    
+    // Calculate travel time for each enabled transport mode
+    const travelOptions = [];
+    
+    for (const mode of userTransportModes) {
+      try {
+        const result = await directionsService.getDirections({
+          origin,
+          destination,
+          mode,
+          departure_time: 'now'
+        });
+
+        if (result.success && result.data.routes.length > 0) {
+          const route = result.data.routes[0];
+          travelOptions.push({
+            mode,
+            duration: route.duration,
+            durationText: route.durationText,
+            distance: route.distance,
+            distanceText: route.distanceText
+          });
+        }
+      } catch (error) {
+        console.error(`Error calculating route for mode ${mode}:`, error);
+        // Continue with other modes even if one fails
+      }
+    }
+
+    if (travelOptions.length === 0) {
+      console.log('No travel options found for user transport modes, trying walking as fallback');
+      
+      // Fallback to walking if no enabled transport modes worked
+      try {
+        const walkingResult = await directionsService.getDirections({
+          origin,
+          destination,
+          mode: 'walking',
+          departure_time: 'now'
+        });
+
+        if (walkingResult.success && walkingResult.data.routes.length > 0) {
+          const route = walkingResult.data.routes[0];
+          travelOptions.push({
+            mode: 'walking',
+            duration: route.duration,
+            durationText: route.durationText,
+            distance: route.distance,
+            distanceText: route.distanceText
+          });
+          
+          console.log('Walking fallback successful');
+        } else {
+          throw new Error('Walking fallback also failed');
+        }
+      } catch (error) {
+        console.error('Walking fallback failed:', error);
+        return res.status(400).json({
+          success: false,
+          error: 'Could not calculate travel time for any transport mode, including walking fallback'
+        });
+      }
+    }
+
+    // Find the fastest option
+    const fastestOption = travelOptions.reduce((fastest, current) => 
+      current.duration < fastest.duration ? current : fastest
+    );
+
+    res.json({
+      success: true,
+      data: {
+        targetUser: {
+          id: targetUser.id,
+          name: targetUser.name,
+          picture: targetUser.picture
+        },
+        travelOptions,
+        fastestOption,
+        origin: {
+          lat: currentLat,
+          lng: currentLng
+        },
+        destination: {
+          lat: targetLat,
+          lng: targetLng
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error calculating travel time:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to calculate travel time',
       message: error.message
     });
   }

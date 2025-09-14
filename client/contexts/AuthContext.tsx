@@ -8,6 +8,10 @@ export interface User {
   email: string;
   name: string;
   picture?: string;
+  latitude?: number;
+  longitude?: number;
+  lat?: number;
+  lng?: number;
 }
 
 interface AuthContextType {
