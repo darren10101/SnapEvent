@@ -57,6 +57,7 @@ export default function EventsScreen() {
 	const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
 	const [fitSignal, setFitSignal] = useState(0);
 	const [selectedPlace, setSelectedPlace] = useState<SelectedPlace>(null);
+	const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | undefined>(undefined);
 
 	const friendLocations = useMemo<FriendLocation[]>(() => {
 		return selectedFriendIds
@@ -67,7 +68,12 @@ export default function EventsScreen() {
 
 	return (
 		<View style={{ flex: 1, backgroundColor: "transparent" }}>
-			<EventsMap friendLocations={friendLocations} fitSignal={fitSignal} selectedPlace={selectedPlace ?? undefined} />
+			<EventsMap 
+				friendLocations={friendLocations} 
+				fitSignal={fitSignal} 
+				selectedPlace={selectedPlace ?? undefined} 
+				onMapCenterChange={setMapCenter}
+			/>
 			<View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} pointerEvents="box-none">
 				<EventsSearchBar
 					ref={(r) => { searchRef.current = r; }}
@@ -75,6 +81,7 @@ export default function EventsScreen() {
 					onFocus={() => sheetRef.current?.minimize()}
 					onCreatePress={() => sheetRef.current?.minimize()}
 					friendsList={friends}
+					mapCenter={mapCenter}
 					onFriendsSelected={(ids) => {
 						setSelectedFriendIds(ids);
 						setFitSignal(s => s + 1);

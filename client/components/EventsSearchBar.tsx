@@ -1,5 +1,5 @@
 import React, { useImperativeHandle, useRef, useState } from "react";
-import { View, TextInput, Pressable, FlatList, Text } from "react-native";
+import { View, TextInput, Pressable, FlatList, Text, ActivityIndicator } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -19,13 +19,14 @@ export type EventsSearchBarProps = {
 	onFriendsSelected?: (friendIds: string[]) => void;
 	friendsList?: Friend[];
 	onPlaceSelected?: (place: SelectedPlace) => void;
+	mapCenter?: { lat: number; lng: number };
 };
 
 export type EventsSearchBarHandle = {
 	focus: () => void;
 };
 
-const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarProps>(function EventsSearchBar({ navigateOnFocus = true, autoFocus = false, onFocus, onCreatePress, onFriendsSelected, friendsList, onPlaceSelected }: EventsSearchBarProps, ref) {
+const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarProps>(function EventsSearchBar({ navigateOnFocus = true, autoFocus = false, onFocus, onCreatePress, onFriendsSelected, friendsList, onPlaceSelected, mapCenter }: EventsSearchBarProps, ref) {
 	const router = useRouter();
 	const insets = useSafeAreaInsets();
 	const inputRef = useRef<TextInput | null>(null);
@@ -61,6 +62,7 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 
 	const fetchAutocomplete = async (text: string) => {
 		if (!apiKey) {
+			console.warn('Google Maps API key not found. Places autocomplete will not work.');
 			setSuggestions([]);
 			return;
 		}
@@ -70,7 +72,16 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 		}
 		try {
 			setIsFetching(true);
-			const res = await fetch(`https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(text)}&key=${apiKey}`);
+			
+			// Build URL with location bias if map center is available
+			let url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(text)}&key=${apiKey}`;
+			
+			if (mapCenter) {
+				// Add location bias to prioritize results near the map center
+				url += `&location=${mapCenter.lat},${mapCenter.lng}&radius=50000`; // 50km radius
+			}
+			
+			const res = await fetch(url);
 			const data = await res.json();
 			if (data.status === "OK" && Array.isArray(data.predictions)) {
 				const mapped: PlaceSuggestion[] = data.predictions.map((p: any) => ({
@@ -80,10 +91,14 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 					placeId: p.place_id,
 				}));
 				setSuggestions(mapped);
+			} else if (data.status === "ZERO_RESULTS") {
+				setSuggestions([]);
 			} else {
+				console.warn('Google Places API error:', data.status, data.error_message);
 				setSuggestions([]);
 			}
 		} catch (e) {
+			console.error('Error fetching place suggestions:', e);
 			setSuggestions([]);
 		} finally {
 			setIsFetching(false);
@@ -97,18 +112,27 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 	};
 
 	const selectSuggestion = async (s: PlaceSuggestion) => {
-		if (!apiKey) return;
+		if (!apiKey) {
+			console.warn('Google Maps API key not found. Cannot get place details.');
+			return;
+		}
 		try {
 			const res = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?place_id=${s.placeId}&fields=geometry,name,formatted_address&key=${apiKey}`);
 			const data = await res.json();
-			const loc = data.result?.geometry?.location;
-			if (loc && typeof loc.lat === "number" && typeof loc.lng === "number") {
-				onPlaceSelected?.({ lat: loc.lat, lng: loc.lng, description: data.result?.name || data.result?.formatted_address || s.primary });
-				setSuggestions([]);
-				setQuery(s.primary);
+			if (data.status === "OK") {
+				const loc = data.result?.geometry?.location;
+				if (loc && typeof loc.lat === "number" && typeof loc.lng === "number") {
+					onPlaceSelected?.({ lat: loc.lat, lng: loc.lng, description: data.result?.name || data.result?.formatted_address || s.primary });
+					setSuggestions([]);
+					setQuery(s.primary);
+				} else {
+					console.warn('Invalid location data received from Google Places API');
+				}
+			} else {
+				console.warn('Google Places Details API error:', data.status, data.error_message);
 			}
 		} catch (e) {
-			// ignore
+			console.error('Error fetching place details:', e);
 		}
 	};
 
@@ -125,9 +149,13 @@ const EventsSearchBar = React.forwardRef<EventsSearchBarHandle, EventsSearchBarP
 						value={query}
 						onChangeText={onChangeQuery}
 					/>
-					<Pressable onPress={goToCreate} hitSlop={8} style={{ padding: 4 }}>
-						<Ionicons name="search" size={22} color="#1A73E8" />
-					</Pressable>
+					{isFetching ? (
+						<ActivityIndicator size="small" color="#1A73E8" style={{ marginRight: 8 }} />
+					) : (
+						<Pressable onPress={goToCreate} hitSlop={8} style={{ padding: 4 }}>
+							<Ionicons name="search" size={22} color="#1A73E8" />
+						</Pressable>
+					)}
 					<Pressable onPress={() => setShowFriendPicker(true)} hitSlop={8} style={{ padding: 4 }}>
 						<Ionicons name="people" size={22} color="#1A73E8" />
 					</Pressable>

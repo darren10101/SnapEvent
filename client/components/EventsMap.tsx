@@ -8,9 +8,10 @@ export type EventsMapProps = {
 	friendLocations?: FriendLocation[];
 	selectedPlace?: { lat: number; lng: number; description?: string } | null;
 	fitSignal?: number; // increment to trigger fit to markers (user + friends + selected place)
+	onMapCenterChange?: (center: { lat: number; lng: number }) => void;
 };
 
-export default function EventsMap({ friendLocations = [], selectedPlace = null, fitSignal = 0 }: EventsMapProps) {
+export default function EventsMap({ friendLocations = [], selectedPlace = null, fitSignal = 0, onMapCenterChange }: EventsMapProps) {
 	const mapRef = useRef<MapView | null>(null);
 	const [hasCentered, setHasCentered] = useState(false);
 	const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -110,6 +111,10 @@ export default function EventsMap({ friendLocations = [], selectedPlace = null, 
 				rotateEnabled={true}
 				pitchEnabled={true}
 				zoomControlEnabled={true}
+				onRegionChangeComplete={(region) => {
+					// Provide the current map center for location-aware search
+					onMapCenterChange?.({ lat: region.latitude, lng: region.longitude });
+				}}
 				onUserLocationChange={(e) => {
 					const { coordinate } = e.nativeEvent;
 					if (coordinate?.latitude && coordinate?.longitude) {
