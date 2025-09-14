@@ -1,6 +1,7 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { Stack } from "expo-router";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { View } from "react-native";
 
 export default function EventsLayout() {
 	const navigation = useNavigation();
@@ -13,7 +14,11 @@ export default function EventsLayout() {
 		}, [navigation])
 	);
 
-	return <Stack screenOptions={{ headerShown: false }} />;
+	return (
+		<View style={{ flex: 1 }}>
+			<Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "transparent" } }} />
+		</View>
+	);
 }
 
 

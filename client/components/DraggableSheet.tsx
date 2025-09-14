@@ -1,15 +1,21 @@
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useImperativeHandle } from "react";
 import { Animated, Dimensions, PanResponder, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-type DraggableSheetProps = {
+export type DraggableSheetProps = {
 	children: React.ReactNode;
 	collapsedHeight?: number; // in px; default ~55% of screen
 	topInset?: number; // distance from top when expanded; default safe area top + 8
 	containerStyle?: object;
 };
 
-export default function DraggableSheet({ children, collapsedHeight, topInset, containerStyle }: DraggableSheetProps) {
+export type DraggableSheetRef = {
+	expand: () => void;
+	collapse: () => void;
+	minimize: () => void;
+	snapTo: (to: number) => void;
+};
+function DraggableSheetInner({ children, collapsedHeight, topInset, containerStyle }: DraggableSheetProps, ref: React.Ref<DraggableSheetRef>) {
 	const insets = useSafeAreaInsets();
 	const screenHeight = Dimensions.get("window").height;
 	const expandedTop = (topInset ?? (insets.top + 8));
@@ -17,7 +23,7 @@ export default function DraggableSheet({ children, collapsedHeight, topInset, co
 	const maxTranslateY = Math.max(0, screenHeight - collapsedH); // 0 = expanded, maxTranslateY = collapsed
 	
 	// Add a third position - minimized (shows only the handle and a bit of content)
-	const minimizedTranslateY = maxTranslateY + 300; // 300px further down from collapsed
+	const minimizedTranslateY = maxTranslateY + 330; // 300px further down from collapsed
 	const absoluteMaxTranslateY = Math.min(minimizedTranslateY, screenHeight - expandedTop - 60); // Ensure at least 60px remains visible
 
 	const translateY = useRef(new Animated.Value(maxTranslateY)).current;
@@ -33,6 +39,13 @@ export default function DraggableSheet({ children, collapsedHeight, topInset, co
 			mass: 0.9,
 		}).start();
 	};
+
+	useImperativeHandle(ref, () => ({
+		expand: () => snapTo(0),
+		collapse: () => snapTo(maxTranslateY),
+		minimize: () => snapTo(absoluteMaxTranslateY),
+		snapTo,
+	}), [maxTranslateY, absoluteMaxTranslateY]);
 
 	const panResponder = useMemo(
 		() =>
@@ -124,5 +137,5 @@ export default function DraggableSheet({ children, collapsedHeight, topInset, co
 		</Animated.View>
 	);
 }
-
-
+const DraggableSheet = React.forwardRef(DraggableSheetInner);
+export default DraggableSheet;
