@@ -290,15 +290,27 @@ export default function EventsScreen() {
 	}, [selectedFriendIds, friends]);
 
 	// Split events into categories
-	const myEvents = useMemo(() => {
-		return allEvents.filter(event => event.createdBy === user?.id);
-	}, [allEvents, user?.id]);
-
-	const invitedEvents = useMemo(() => {
-		return allEvents.filter(event => 
+	const { myUpcomingEvents, myPastEvents, invitedUpcomingEvents, invitedPastEvents } = useMemo(() => {
+		const now = new Date();
+		
+		const myEventsAll = allEvents.filter(event => event.createdBy === user?.id);
+		const invitedEventsAll = allEvents.filter(event => 
 			event.createdBy !== user?.id && 
 			event.participants.includes(user?.id || '')
 		);
+
+		const myUpcoming = myEventsAll.filter(event => new Date(event.end) > now);
+		const myPast = myEventsAll.filter(event => new Date(event.end) <= now);
+		
+		const invitedUpcoming = invitedEventsAll.filter(event => new Date(event.end) > now);
+		const invitedPast = invitedEventsAll.filter(event => new Date(event.end) <= now);
+
+		return {
+			myUpcomingEvents: myUpcoming,
+			myPastEvents: myPast,
+			invitedUpcomingEvents: invitedUpcoming,
+			invitedPastEvents: invitedPast
+		};
 	}, [allEvents, user?.id]);
 
 	const handleMapPress = async (lat: number, lng: number) => {
@@ -428,26 +440,60 @@ export default function EventsScreen() {
 						{/* My Events Section */}
 						<View style={{ marginBottom: 20 }}>
 							<Text style={{ fontSize: 18, fontWeight: "600", marginBottom: 8, color: "#333" }}>My Events</Text>
-							{myEvents.length > 0 ? (
-								myEvents.map((item) => (
-									<Pressable 
-										key={item.id} 
-										onPress={() => handleEventClick(item)}
-										style={{ 
-											paddingVertical: 12, 
-											borderBottomWidth: 1, 
-											borderColor: "#eee",
-											backgroundColor: 'transparent',
-											borderRadius: 4
-										}}
-									>
-										<Text style={{ fontSize: 16, fontWeight: "600" }}>{item.name}</Text>
-										<Text style={{ color: "#666" }}>
-											{formatEventTime(item.start, item.end)} • {formatEventLocation(item.location)} • {item.participants.length} going
-										</Text>
-									</Pressable>
-								))
-							) : (
+							
+							{/* Upcoming My Events */}
+							{myUpcomingEvents.length > 0 && (
+								<View style={{ marginBottom: 12 }}>
+									<Text style={{ fontSize: 14, fontWeight: "500", marginBottom: 6, color: "#666" }}>Upcoming</Text>
+									{myUpcomingEvents.map((item) => (
+										<Pressable 
+											key={item.id} 
+											onPress={() => handleEventClick(item)}
+											style={{ 
+												paddingVertical: 12, 
+												borderBottomWidth: 1, 
+												borderColor: "#eee",
+												backgroundColor: 'transparent',
+												borderRadius: 4
+											}}
+										>
+											<Text style={{ fontSize: 16, fontWeight: "600" }}>{item.name}</Text>
+											<Text style={{ color: "#666" }}>
+												{formatEventTime(item.start, item.end)} • {formatEventLocation(item.location)} • {item.participants.length} going
+											</Text>
+										</Pressable>
+									))}
+								</View>
+							)}
+
+							{/* Past My Events */}
+							{myPastEvents.length > 0 && (
+								<View style={{ marginBottom: 12 }}>
+									<Text style={{ fontSize: 14, fontWeight: "500", marginBottom: 6, color: "#666" }}>Past Events</Text>
+									{myPastEvents.map((item) => (
+										<Pressable 
+											key={item.id} 
+											onPress={() => handleEventClick(item)}
+											style={{ 
+												paddingVertical: 12, 
+												borderBottomWidth: 1, 
+												borderColor: "#eee",
+												backgroundColor: 'transparent',
+												borderRadius: 4,
+												opacity: 0.7
+											}}
+										>
+											<Text style={{ fontSize: 16, fontWeight: "600", color: "#888" }}>{item.name}</Text>
+											<Text style={{ color: "#999" }}>
+												{formatEventTime(item.start, item.end)} • {formatEventLocation(item.location)} • {item.participants.length} went
+											</Text>
+										</Pressable>
+									))}
+								</View>
+							)}
+
+							{/* No events message */}
+							{myUpcomingEvents.length === 0 && myPastEvents.length === 0 && (
 								<View style={{ padding: 12, alignItems: "center", backgroundColor: "#f8f9fa", borderRadius: 8 }}>
 									<Text style={{ color: "#666", fontSize: 14 }}>No events created yet</Text>
 								</View>
@@ -457,26 +503,60 @@ export default function EventsScreen() {
 						{/* Invited Events Section */}
 						<View>
 							<Text style={{ fontSize: 18, fontWeight: "600", marginBottom: 8, color: "#333" }}>Invited Events</Text>
-							{invitedEvents.length > 0 ? (
-								invitedEvents.map((item) => (
-									<Pressable 
-										key={item.id} 
-										onPress={() => handleEventClick(item)}
-										style={{ 
-											paddingVertical: 12, 
-											borderBottomWidth: 1, 
-											borderColor: "#eee",
-											backgroundColor: 'transparent',
-											borderRadius: 4
-										}}
-									>
-										<Text style={{ fontSize: 16, fontWeight: "600" }}>{item.name}</Text>
-										<Text style={{ color: "#666" }}>
-											{formatEventTime(item.start, item.end)} • {formatEventLocation(item.location)} • {item.participants.length} going
-										</Text>
-									</Pressable>
-								))
-							) : (
+							
+							{/* Upcoming Invited Events */}
+							{invitedUpcomingEvents.length > 0 && (
+								<View style={{ marginBottom: 12 }}>
+									<Text style={{ fontSize: 14, fontWeight: "500", marginBottom: 6, color: "#666" }}>Upcoming</Text>
+									{invitedUpcomingEvents.map((item) => (
+										<Pressable 
+											key={item.id} 
+											onPress={() => handleEventClick(item)}
+											style={{ 
+												paddingVertical: 12, 
+												borderBottomWidth: 1, 
+												borderColor: "#eee",
+												backgroundColor: 'transparent',
+												borderRadius: 4
+											}}
+										>
+											<Text style={{ fontSize: 16, fontWeight: "600" }}>{item.name}</Text>
+											<Text style={{ color: "#666" }}>
+												{formatEventTime(item.start, item.end)} • {formatEventLocation(item.location)} • {item.participants.length} going
+											</Text>
+										</Pressable>
+									))}
+								</View>
+							)}
+
+							{/* Past Invited Events */}
+							{invitedPastEvents.length > 0 && (
+								<View style={{ marginBottom: 12 }}>
+									<Text style={{ fontSize: 14, fontWeight: "500", marginBottom: 6, color: "#666" }}>Past Events</Text>
+									{invitedPastEvents.map((item) => (
+										<Pressable 
+											key={item.id} 
+											onPress={() => handleEventClick(item)}
+											style={{ 
+												paddingVertical: 12, 
+												borderBottomWidth: 1, 
+												borderColor: "#eee",
+												backgroundColor: 'transparent',
+												borderRadius: 4,
+												opacity: 0.7
+											}}
+										>
+											<Text style={{ fontSize: 16, fontWeight: "600", color: "#888" }}>{item.name}</Text>
+											<Text style={{ color: "#999" }}>
+												{formatEventTime(item.start, item.end)} • {formatEventLocation(item.location)} • {item.participants.length} went
+											</Text>
+										</Pressable>
+									))}
+								</View>
+							)}
+
+							{/* No events message */}
+							{invitedUpcomingEvents.length === 0 && invitedPastEvents.length === 0 && (
 								<View style={{ padding: 12, alignItems: "center", backgroundColor: "#f8f9fa", borderRadius: 8 }}>
 									<Text style={{ color: "#666", fontSize: 14 }}>No invited events</Text>
 								</View>
