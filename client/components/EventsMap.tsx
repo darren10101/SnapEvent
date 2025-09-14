@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, Image, Text } from "react-native";
+import { View, Image, Text, TouchableOpacity } from "react-native";
 import MapView, { Marker, Region, MapPressEvent, PoiClickEvent } from "react-native-maps";
 
 export type FriendLocation = { id: string; name: string; lat: number; lng: number; picture?: string };
@@ -113,6 +113,34 @@ export default function EventsMap({ friendLocations = [], selectedPlace = null, 
 		}
 	};
 
+	const handleZoomIn = () => {
+		mapRef.current?.getCamera().then((camera) => {
+			const newZoom = Math.min((camera.zoom || 10) + 1, 20);
+			mapRef.current?.animateCamera({ zoom: newZoom }, { duration: 300 });
+		});
+	};
+
+	const handleZoomOut = () => {
+		mapRef.current?.getCamera().then((camera) => {
+			const newZoom = Math.max((camera.zoom || 10) - 1, 1);
+			mapRef.current?.animateCamera({ zoom: newZoom }, { duration: 300 });
+		});
+	};
+
+	const handleMyLocation = () => {
+		if (userLocation) {
+			mapRef.current?.animateToRegion(
+				{
+					latitude: userLocation.latitude,
+					longitude: userLocation.longitude,
+					latitudeDelta: 0.01,
+					longitudeDelta: 0.01,
+				},
+				500
+			);
+		}
+	};
+
 	return (
 		<View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
 			<MapView
@@ -120,13 +148,13 @@ export default function EventsMap({ friendLocations = [], selectedPlace = null, 
 				style={{ flex: 1 }}
 				initialRegion={defaultRegion}
 				showsUserLocation={true}
-				showsMyLocationButton={true}
+				showsMyLocationButton={false}
 				showsCompass={true}
 				zoomEnabled={true}
 				scrollEnabled={true}
 				rotateEnabled={true}
 				pitchEnabled={true}
-				zoomControlEnabled={true}
+				zoomControlEnabled={false}
 				onPress={handleMapPress}
 				onPoiClick={handlePoiClick}
 				onRegionChangeComplete={(region) => {
@@ -166,6 +194,98 @@ export default function EventsMap({ friendLocations = [], selectedPlace = null, 
 					<Marker coordinate={{ latitude: selectedPlace.lat, longitude: selectedPlace.lng }} title={selectedPlace.description ?? "Selected Place"} pinColor="#1A73E8" />
 				) : null}
 			</MapView>
+			
+			{/* Custom Zoom Controls positioned higher up */}
+			<View style={{
+				position: 'absolute',
+				right: 16,
+				bottom: 60, // Moved up from the typical bottom position
+				flexDirection: 'column',
+				backgroundColor: 'transparent'
+			}}>
+				<TouchableOpacity
+					onPress={handleZoomIn}
+					style={{
+						width: 44,
+						height: 44,
+						backgroundColor: '#ffffff',
+						borderRadius: 22,
+						alignItems: 'center',
+						justifyContent: 'center',
+						marginBottom: 8,
+						elevation: 4,
+						shadowColor: '#000',
+						shadowOpacity: 0.25,
+						shadowRadius: 4,
+						shadowOffset: { width: 0, height: 2 },
+						borderWidth: 1,
+						borderColor: '#e0e0e0'
+					}}
+					activeOpacity={0.7}
+				>
+					<Text style={{ 
+						fontSize: 24, 
+						fontWeight: 'bold', 
+						color: '#333',
+						lineHeight: 24
+					}}>+</Text>
+				</TouchableOpacity>
+				
+				<TouchableOpacity
+					onPress={handleZoomOut}
+					style={{
+						width: 44,
+						height: 44,
+						backgroundColor: '#ffffff',
+						borderRadius: 22,
+						alignItems: 'center',
+						justifyContent: 'center',
+						marginBottom: 8,
+						elevation: 4,
+						shadowColor: '#000',
+						shadowOpacity: 0.25,
+						shadowRadius: 4,
+						shadowOffset: { width: 0, height: 2 },
+						borderWidth: 1,
+						borderColor: '#e0e0e0'
+					}}
+					activeOpacity={0.7}
+				>
+					<Text style={{ 
+						fontSize: 24, 
+						fontWeight: 'bold', 
+						color: '#333',
+						lineHeight: 24
+					}}>−</Text>
+				</TouchableOpacity>
+				
+				<TouchableOpacity
+					onPress={handleMyLocation}
+					style={{
+						width: 44,
+						height: 44,
+						backgroundColor: '#ffffff',
+						borderRadius: 22,
+						alignItems: 'center',
+						justifyContent: 'center',
+						elevation: 4,
+						shadowColor: '#000',
+						shadowOpacity: 0.25,
+						shadowRadius: 4,
+						shadowOffset: { width: 0, height: 2 },
+						borderWidth: 1,
+						borderColor: '#e0e0e0'
+					}}
+					activeOpacity={0.7}
+				>
+					<Text style={{ 
+						fontSize: 20, 
+						fontWeight: 'bold', 
+						color: '#333',
+						lineHeight: 20
+					}}>⌖</Text>
+				</TouchableOpacity>
+			</View>
 		</View>
 	);
 }
