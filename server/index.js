@@ -16,6 +16,7 @@ const eventsRoutes = require('./routes/events');
 const usersRoutes = require('./routes/users');
 const authRoutes = require('./routes/auth');
 const directionsRoutes = require('./routes/directions');
+const agentRoutes = require('./routes/agent');
 
 // Middleware
 app.use(cors({
@@ -49,6 +50,7 @@ app.use('/auth', authRoutes);
 app.use('/api/events', eventsRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/directions', directionsRoutes);
+app.use('/api/agent', agentRoutes);
 
 // Basic route
 app.get('/', (req, res) => {
