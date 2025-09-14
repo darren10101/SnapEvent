@@ -1,10 +1,12 @@
 import React, { useRef, useState, useMemo, useEffect } from "react";
-import { View, Text, Alert } from "react-native";
+import { View, Text, Alert, Pressable } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import EventsSearchBar, { EventsSearchBarHandle } from "../../../components/EventsSearchBar";
 import DraggableSheet, { DraggableSheetRef } from "../../../components/DraggableSheet";
 import EventsMap from "../../../components/EventsMap";
 import EventCreationModal from "../../../components/EventCreationModal";
+import EventPreviewModal from "../../../components/EventPreviewModal";
+import EventEditModal from "../../../components/EventEditModal";
 import { useAuth } from "../../../contexts/AuthContext";
 
 type EventItem = { 
@@ -97,6 +99,10 @@ export default function EventsScreen() {
 	const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number } | undefined>(undefined);
 	const [showEventCreation, setShowEventCreation] = useState(false);
 	const [eventCreationPlace, setEventCreationPlace] = useState<SelectedPlace>(null);
+	const [showEventPreview, setShowEventPreview] = useState(false);
+	const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null);
+	const [showEventEdit, setShowEventEdit] = useState(false);
+	const [editingEvent, setEditingEvent] = useState<EventItem | null>(null);
 
 	const loadEvents = async () => {
 		if (!user) return;
@@ -181,6 +187,67 @@ export default function EventsScreen() {
 	const handleEventCancel = () => {
 		setShowEventCreation(false);
 		setEventCreationPlace(null);
+	};
+
+	const handleEventClick = (event: EventItem) => {
+		setSelectedEvent(event);
+		setShowEventPreview(true);
+	};
+
+	const handleEventEdit = (event: EventItem) => {
+		setShowEventPreview(false);
+		setEditingEvent(event);
+		setShowEventEdit(true);
+	};
+
+	const handleEventUpdate = async (eventData: {
+		id: string;
+		title: string;
+		description: string;
+		startDate: Date;
+		endDate: Date;
+		location: { lat: number; lng: number; description?: string };
+		invitedFriends: string[];
+	}) => {
+		if (!user) {
+			Alert.alert('Error', 'You must be logged in to update events');
+			return;
+		}
+
+		try {
+			const response = await fetch(`${process.env.EXPO_PUBLIC_API_URL}/api/events/${eventData.id}`, {
+				method: 'PUT',
+				headers: {
+					'Content-Type': 'application/json',
+					...(token && { 'Authorization': `Bearer ${token}` })
+				},
+				body: JSON.stringify({
+					name: eventData.title,
+					description: eventData.description,
+					location: eventData.location,
+					start: eventData.startDate.toISOString(),
+					end: eventData.endDate.toISOString(),
+					participants: [user.id, ...eventData.invitedFriends]
+				})
+			});
+
+			const result = await response.json();
+
+			if (response.ok && result.success) {
+				console.log('Event updated successfully:', result.data);
+				setShowEventEdit(false);
+				setEditingEvent(null);
+				Alert.alert('Success', 'Event updated successfully!');
+				// Refresh events list
+				loadEvents();
+			} else {
+				console.error('Failed to update event:', result.error);
+				Alert.alert('Error', result.error || 'Failed to update event');
+			}
+		} catch (error) {
+			console.error('Error updating event:', error);
+			Alert.alert('Error', 'Failed to update event. Please try again.');
+		}
 	};
 
 	const formatEventTime = (startDate: string, endDate: string) => {
@@ -268,12 +335,22 @@ export default function EventsScreen() {
 							<Text style={{ fontSize: 18, fontWeight: "600", marginBottom: 8, color: "#333" }}>My Events</Text>
 							{myEvents.length > 0 ? (
 								myEvents.map((item) => (
-									<View key={item.id} style={{ paddingVertical: 12, borderBottomWidth: 1, borderColor: "#eee" }}>
+									<Pressable 
+										key={item.id} 
+										onPress={() => handleEventClick(item)}
+										style={{ 
+											paddingVertical: 12, 
+											borderBottomWidth: 1, 
+											borderColor: "#eee",
+											backgroundColor: 'transparent',
+											borderRadius: 4
+										}}
+									>
 										<Text style={{ fontSize: 16, fontWeight: "600" }}>{item.name}</Text>
 										<Text style={{ color: "#666" }}>
 											{formatEventTime(item.start, item.end)} • {formatEventLocation(item.location)} • {item.participants.length} going
 										</Text>
-									</View>
+									</Pressable>
 								))
 							) : (
 								<View style={{ padding: 12, alignItems: "center", backgroundColor: "#f8f9fa", borderRadius: 8 }}>
@@ -287,12 +364,22 @@ export default function EventsScreen() {
 							<Text style={{ fontSize: 18, fontWeight: "600", marginBottom: 8, color: "#333" }}>Invited Events</Text>
 							{invitedEvents.length > 0 ? (
 								invitedEvents.map((item) => (
-									<View key={item.id} style={{ paddingVertical: 12, borderBottomWidth: 1, borderColor: "#eee" }}>
+									<Pressable 
+										key={item.id} 
+										onPress={() => handleEventClick(item)}
+										style={{ 
+											paddingVertical: 12, 
+											borderBottomWidth: 1, 
+											borderColor: "#eee",
+											backgroundColor: 'transparent',
+											borderRadius: 4
+										}}
+									>
 										<Text style={{ fontSize: 16, fontWeight: "600" }}>{item.name}</Text>
 										<Text style={{ color: "#666" }}>
 											{formatEventTime(item.start, item.end)} • {formatEventLocation(item.location)} • {item.participants.length} going
 										</Text>
-									</View>
+									</Pressable>
 								))
 							) : (
 								<View style={{ padding: 12, alignItems: "center", backgroundColor: "#f8f9fa", borderRadius: 8 }}>
@@ -323,6 +410,26 @@ export default function EventsScreen() {
 				friends={friends}
 				onClose={handleEventCancel}
 				onSave={handleEventSave}
+			/>
+
+			<EventPreviewModal
+				visible={showEventPreview}
+				event={selectedEvent}
+				friends={friends}
+				currentUserId={user?.id}
+				onClose={() => setShowEventPreview(false)}
+				onEdit={handleEventEdit}
+			/>
+
+			<EventEditModal
+				visible={showEventEdit}
+				event={editingEvent}
+				friends={friends}
+				onClose={() => {
+					setShowEventEdit(false);
+					setEditingEvent(null);
+				}}
+				onSave={handleEventUpdate}
 			/>
 		</View>
 	);

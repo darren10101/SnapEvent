@@ -103,7 +103,7 @@ router.get('/:id', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { name, location, start, end, createdBy, participants } = req.body;
+    const { name, description, location, start, end, createdBy, participants } = req.body;
     
     // Basic validation
     if (!name || !location || !start || !end || !createdBy) {
@@ -134,9 +134,11 @@ router.post('/', async (req, res) => {
     const newEvent = {
       id: eventId,
       name,
+      description: description || '',
       location: {
         lat: parseFloat(location.lat),
-        lng: parseFloat(location.lng)
+        lng: parseFloat(location.lng),
+        description: location.description || ''
       },
       start,
       end,
@@ -171,7 +173,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, location, start, end, participants } = req.body;
+    const { name, description, location, start, end, participants } = req.body;
 
     // Check if event exists
     const existingEvent = await eventsDB.getItem({ id });
@@ -195,13 +197,20 @@ router.put('/:id', async (req, res) => {
       expressionAttributeNames['#name'] = 'name';
       expressionAttributeValues[':name'] = name;
     }
+
+    if (description !== undefined) {
+      updateParts.push('#description = :description');
+      expressionAttributeNames['#description'] = 'description';
+      expressionAttributeValues[':description'] = description;
+    }
     
     if (location && location.lat && location.lng) {
       updateParts.push('#location = :location');
       expressionAttributeNames['#location'] = 'location';
       expressionAttributeValues[':location'] = {
         lat: parseFloat(location.lat),
-        lng: parseFloat(location.lng)
+        lng: parseFloat(location.lng),
+        description: location.description || ''
       };
     }
     
