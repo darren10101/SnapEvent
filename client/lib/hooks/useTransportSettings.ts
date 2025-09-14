@@ -13,7 +13,7 @@ import {
  * Provides easy access to transport settings with automatic state management
  * Now supports database persistence with local storage fallback
  */
-export const useTransportSettings = () => {
+export const useTransportSettings = (onTransportModesChanged?: () => void) => {
   const [transportModes, setTransportModesState] = useState<TransportMode[]>(['driving']);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -60,6 +60,11 @@ export const useTransportSettings = () => {
       
       // Save to server and local storage
       await setTransportModes(newModes);
+      
+      // Call the callback to notify about the change
+      if (onTransportModesChanged) {
+        onTransportModesChanged();
+      }
     } catch (err) {
       // Revert optimistic update on error
       await loadTransportModes();
@@ -67,7 +72,7 @@ export const useTransportSettings = () => {
       console.error('Error updating transport modes:', err);
       throw err;
     }
-  }, [loadTransportModes]);
+  }, [loadTransportModes, onTransportModesChanged]);
 
   const toggleTransportMode = useCallback(async (mode: TransportMode) => {
     try {
