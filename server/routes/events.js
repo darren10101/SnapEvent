@@ -242,12 +242,24 @@ router.put('/:id', async (req, res) => {
 
     updateExpression = `SET ${updateParts.join(', ')}`;
 
+    // Check if we need to invalidate travel schedules cache
+    const shouldInvalidateCache = name || location || start || end || participants;
+
+    if (shouldInvalidateCache) {
+      // Clear travel schedules cache since event details changed
+      updateExpression = `SET ${updateParts.join(', ')} REMOVE travelSchedulesCache`;
+    }
+
     const updatedAttributes = await eventsDB.updateItem(
       { id },
       updateExpression,
       expressionAttributeValues,
       Object.keys(expressionAttributeNames).length > 0 ? expressionAttributeNames : undefined
     );
+
+    if (shouldInvalidateCache) {
+      console.log(`Travel schedules cache invalidated for event ${id} due to event changes`);
+    }
 
     res.json({
       success: true,
@@ -335,14 +347,17 @@ router.post('/:id/participants', async (req, res) => {
     const currentParticipants = existingEvent.participants || [];
     const newParticipants = [...new Set([...currentParticipants, ...userIds])];
 
+    // Clear travel schedules cache since participants changed
     const updatedAttributes = await eventsDB.updateItem(
       { id },
-      'SET participants = :participants, updatedAt = :updatedAt',
+      'SET participants = :participants, updatedAt = :updatedAt REMOVE travelSchedulesCache',
       { 
         ':participants': newParticipants,
         ':updatedAt': new Date().toISOString()
       }
     );
+
+    console.log(`Travel schedules cache invalidated for event ${id} due to participant changes`);
 
     res.json({
       success: true,
@@ -473,6 +488,185 @@ router.get('/:id/itinerary/:googleId', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch itinerary',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/events/:id/travel-schedules
+ * Get cached travel schedules for all participants in an event
+ */
+router.get('/:id/travel-schedules', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { regenerate } = req.query;
+
+    const event = await eventsDB.getItem({ id });
+    
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        error: 'Event not found'
+      });
+    }
+
+    // Check if cached schedules exist and are valid (unless regenerate is requested)
+    const shouldRegenerate = regenerate === 'true' || !event.travelSchedulesCache || !event.travelSchedulesCache.data;
+    
+    if (!shouldRegenerate) {
+      // Check if cache is still valid (not expired)
+      const cacheAge = Date.now() - new Date(event.travelSchedulesCache.generatedAt).getTime();
+      const cacheExpiry = 30 * 60 * 1000; // 30 minutes
+      
+      if (cacheAge < cacheExpiry) {
+        console.log(`Serving cached travel schedules for event ${id}`);
+        return res.json({
+          success: true,
+          data: event.travelSchedulesCache.data,
+          cached: true,
+          generatedAt: event.travelSchedulesCache.generatedAt
+        });
+      }
+    }
+
+    // Need to regenerate schedules
+    console.log(`Generating travel schedules for event ${id}`);
+    
+    // Generate new travel schedules
+    const travelSchedulesService = require('../services/travelSchedulesService');
+    const schedules = await travelSchedulesService.generateEventTravelSchedules(
+      event.id,
+      event.participants || [],
+      event.location,
+      event.start,
+      event.end
+    );
+
+    // Cache the generated schedules
+    const cacheData = {
+      data: schedules,
+      generatedAt: new Date().toISOString(),
+      eventVersion: event.updatedAt,
+      participants: event.participants || []
+    };
+
+    await eventsDB.updateItem(
+      { id },
+      'SET travelSchedulesCache = :cache',
+      { ':cache': cacheData }
+    );
+
+    res.json({
+      success: true,
+      data: schedules,
+      cached: false,
+      generatedAt: cacheData.generatedAt
+    });
+
+  } catch (error) {
+    console.error('Error fetching travel schedules:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch travel schedules',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/events/:id/travel-schedules/regenerate
+ * Force regeneration of travel schedules cache
+ */
+router.post('/:id/travel-schedules/regenerate', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const event = await eventsDB.getItem({ id });
+    
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        error: 'Event not found'
+      });
+    }
+
+    console.log(`Force regenerating travel schedules for event ${id}`);
+    
+    // Generate new travel schedules
+    const travelSchedulesService = require('../services/travelSchedulesService');
+    const schedules = await travelSchedulesService.generateEventTravelSchedules(
+      event.id,
+      event.participants || [],
+      event.location,
+      event.start,
+      event.end
+    );
+
+    // Update cache
+    const cacheData = {
+      data: schedules,
+      generatedAt: new Date().toISOString(),
+      eventVersion: event.updatedAt,
+      participants: event.participants || []
+    };
+
+    await eventsDB.updateItem(
+      { id },
+      'SET travelSchedulesCache = :cache',
+      { ':cache': cacheData }
+    );
+
+    res.json({
+      success: true,
+      data: schedules,
+      message: 'Travel schedules regenerated successfully',
+      generatedAt: cacheData.generatedAt
+    });
+
+  } catch (error) {
+    console.error('Error regenerating travel schedules:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to regenerate travel schedules',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * DELETE /api/events/:id/travel-schedules/cache
+ * Clear travel schedules cache for an event
+ */
+router.delete('/:id/travel-schedules/cache', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const event = await eventsDB.getItem({ id });
+    
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        error: 'Event not found'
+      });
+    }
+
+    // Clear the cache
+    await eventsDB.updateItem(
+      { id },
+      'REMOVE travelSchedulesCache'
+    );
+
+    res.json({
+      success: true,
+      message: 'Travel schedules cache cleared successfully'
+    });
+
+  } catch (error) {
+    console.error('Error clearing travel schedules cache:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to clear travel schedules cache',
       message: error.message
     });
   }

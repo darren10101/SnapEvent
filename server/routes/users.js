@@ -8,8 +8,45 @@ const router = express.Router();
 // Initialize DynamoDB service for users table
 const usersDB = new DynamoDBService(process.env.USERS_TABLE || 'snapevent-users');
 
+// Initialize DynamoDB service for events table (for cache invalidation)
+const eventsDB = new DynamoDBService(process.env.EVENTS_TABLE || 'snapevent-events');
+
 // Initialize Google Directions service
 const directionsService = new GoogleDirectionsService();
+
+/**
+ * Helper function to invalidate travel schedules cache for events where a user participates
+ */
+async function invalidateUserTravelSchedulesCache(userId) {
+  try {
+    console.log(`Invalidating travel schedules cache for user ${userId}`);
+    
+    // Get all events and find where this user participates
+    const allEvents = await eventsDB.scanTable();
+    const userEvents = allEvents.filter(event => 
+      event.participants && event.participants.includes(userId)
+    );
+
+    console.log(`Found ${userEvents.length} events where user ${userId} participates`);
+
+    // Clear travel schedules cache for each event
+    const invalidationPromises = userEvents.map(event => 
+      eventsDB.updateItem(
+        { id: event.id },
+        'REMOVE travelSchedulesCache'
+      ).catch(error => {
+        console.error(`Error clearing cache for event ${event.id}:`, error);
+      })
+    );
+
+    await Promise.all(invalidationPromises);
+    console.log(`Travel schedules cache invalidated for ${userEvents.length} events`);
+
+  } catch (error) {
+    console.error('Error invalidating user travel schedules cache:', error);
+    throw error;
+  }
+}
 
 /**
  * GET /api/users
@@ -246,6 +283,16 @@ router.put('/:googleId', async (req, res) => {
       expressionAttributeValues,
       Object.keys(expressionAttributeNames).length > 0 ? expressionAttributeNames : undefined
     );
+
+    // If transport modes were updated, invalidate travel schedules cache for events where this user participates
+    if (transportModes) {
+      try {
+        await invalidateUserTravelSchedulesCache(googleId);
+      } catch (cacheError) {
+        console.error('Error invalidating travel schedules cache:', cacheError);
+        // Don't fail the user update if cache invalidation fails
+      }
+    }
 
     res.json({
       success: true,
@@ -1030,6 +1077,14 @@ router.put('/:googleId/transport-settings', authenticateToken, async (req, res) 
         ':lastLogin': new Date().toISOString()
       }
     );
+
+    // Invalidate travel schedules cache for events where this user participates
+    try {
+      await invalidateUserTravelSchedulesCache(googleId);
+    } catch (cacheError) {
+      console.error('Error invalidating travel schedules cache:', cacheError);
+      // Don't fail the update if cache invalidation fails
+    }
 
     res.json({
       success: true,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, Pressable, ActivityIndicator, Image } from 'react-native';
-import { TravelSchedule, generateEventTravelSchedules } from '../lib/travelScheduleService';
+import { TravelSchedule } from '../lib/travelScheduleService';
 import { TRANSPORT_MODES } from '../lib/transportSettings';
 
 // Helper function to get appropriate icon for transit vehicle type
@@ -31,32 +31,84 @@ const getTransitIcon = (vehicleType?: string): string => {
   }
 };
 
+/**
+ * Load cached travel schedules from API
+ */
+async function loadCachedTravelSchedules(
+  eventId: string, 
+  isEditing: boolean, 
+  token?: string
+): Promise<{ schedules: TravelSchedule[], cached: boolean } | null> {
+  try {
+    const url = `${process.env.EXPO_PUBLIC_API_URL}/api/events/${eventId}/travel-schedules${isEditing ? '?regenerate=true' : ''}`;
+    
+    const response = await fetch(url, {
+      headers: token ? { 'Authorization': `Bearer ${token}` } : undefined,
+    });
+
+    const data = await response.json();
+    
+    if (response.ok && data.success) {
+      // Convert date strings back to Date objects for consistency
+      const schedules = (data.data || []).map((schedule: any) => ({
+        ...schedule,
+        outbound: {
+          ...schedule.outbound,
+          departureTime: new Date(schedule.outbound.departureTime),
+          arrivalTime: new Date(schedule.outbound.arrivalTime)
+        },
+        return: {
+          ...schedule.return,
+          departureTime: new Date(schedule.return.departureTime),
+          arrivalTime: new Date(schedule.return.arrivalTime)
+        }
+      }));
+
+      return {
+        schedules,
+        cached: data.cached !== false
+      };
+    } else {
+      console.warn('Failed to load cached travel schedules:', data.error);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error loading cached travel schedules:', error);
+    return null;
+  }
+}
+
 interface EventScheduleProps {
+  eventId?: string; // Add eventId prop for cache support
   invitedFriends: Array<{ id: string; name: string; picture?: string; lat?: number; lng?: number }>;
   eventLocation: { lat: number; lng: number };
   eventStart: string;
   eventEnd: string;
   token?: string;
+  isEditing?: boolean; // Add prop to know if event is being edited
 }
 
 export default function EventSchedule({
+  eventId,
   invitedFriends,
   eventLocation,
   eventStart,
   eventEnd,
-  token
+  token,
+  isEditing = false
 }: EventScheduleProps) {
   const [schedules, setSchedules] = useState<TravelSchedule[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [expandedOutbound, setExpandedOutbound] = useState(false);
   const [expandedReturn, setExpandedReturn] = useState(false);
+  const [cached, setCached] = useState<boolean>(false);
 
   useEffect(() => {
     if (invitedFriends.length > 0) {
       loadSchedules();
     }
-  }, [invitedFriends, eventLocation, eventStart, eventEnd]);
+  }, [invitedFriends, eventLocation, eventStart, eventEnd, eventId]);
 
   // Reset expanded states when user selection changes
   useEffect(() => {
@@ -67,35 +119,48 @@ export default function EventSchedule({
   const loadSchedules = async () => {
     setLoading(true);
     try {
-      console.log('Loading schedules for invited friends:', invitedFriends);
-      console.log('Event location:', eventLocation);
-      console.log('Event start:', eventStart);
-      console.log('Event end:', eventEnd);
-      
-      // Check if friends have location data
-      const friendsWithLocation = invitedFriends.filter(f => f.lat && f.lng);
-      const friendsWithoutLocation = invitedFriends.filter(f => !f.lat || !f.lng);
-      
-      console.log('Friends with location data:', friendsWithLocation);
-      console.log('Friends WITHOUT location data:', friendsWithoutLocation);
-      
-      if (friendsWithLocation.length === 0) {
-        console.warn('No friends have location data');
-        setSchedules([]);
-        return;
+      let travelSchedules: TravelSchedule[] = [];
+
+      // Try to use cached API if eventId is available
+      if (eventId) {
+        const scheduleData = await loadCachedTravelSchedules(eventId, isEditing, token);
+        if (scheduleData) {
+          travelSchedules = scheduleData.schedules;
+          setCached(scheduleData.cached);
+        }
       }
-      
-      const startDate = new Date(eventStart);
-      const endDate = new Date(eventEnd);
-      
-      const travelSchedules = await generateEventTravelSchedules(
-        invitedFriends,
-        eventLocation,
-        startDate,
-        endDate,
-        token
-      );
-      
+
+      // Fallback to client-side generation if no cached data or no eventId
+      if (travelSchedules.length === 0) {
+        console.log('Falling back to client-side schedule generation');
+        setCached(false);
+        
+        // Check if friends have location data
+        const friendsWithLocation = invitedFriends.filter(f => f.lat && f.lng);
+        const friendsWithoutLocation = invitedFriends.filter(f => !f.lat || !f.lng);
+        
+        console.log('Friends with location data:', friendsWithLocation);
+        console.log('Friends WITHOUT location data:', friendsWithoutLocation);
+        
+        if (friendsWithLocation.length === 0) {
+          console.warn('No friends have location data');
+          setSchedules([]);
+          return;
+        }
+        
+        const startDate = new Date(eventStart);
+        const endDate = new Date(eventEnd);
+        
+        const { generateEventTravelSchedules } = await import('../lib/travelScheduleService');
+        travelSchedules = await generateEventTravelSchedules(
+          invitedFriends,
+          eventLocation,
+          startDate,
+          endDate,
+          token
+        );
+      }
+
       console.log('Generated travel schedules:', travelSchedules);
       
       setSchedules(travelSchedules);
@@ -104,21 +169,62 @@ export default function EventSchedule({
       }
     } catch (error) {
       console.error('Error loading schedules:', error);
+      setCached(false);
     } finally {
       setLoading(false);
     }
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('en-US', { 
+  const regenerateSchedules = async () => {
+    if (!eventId) {
+      // If no eventId, just reload normally
+      loadSchedules();
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const url = `${process.env.EXPO_PUBLIC_API_URL}/api/events/${eventId}/travel-schedules/regenerate`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : undefined,
+      });
+
+      const data = await response.json();
+      
+      if (response.ok && data.success) {
+        setSchedules(data.data || []);
+        setCached(false); // Freshly generated
+        if (data.data && data.data.length > 0 && !selectedUserId) {
+          setSelectedUserId(data.data[0].userId);
+        }
+      } else {
+        console.warn('Failed to regenerate travel schedules:', data.error);
+        // Fallback to normal loading
+        loadSchedules();
+      }
+    } catch (error) {
+      console.error('Error regenerating schedules:', error);
+      // Fallback to normal loading
+      loadSchedules();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatTime = (date: Date | string) => {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    return dateObj.toLocaleTimeString('en-US', { 
       hour: 'numeric', 
       minute: '2-digit', 
       hour12: true 
     });
   };
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', { 
+  const formatDate = (date: Date | string) => {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    return dateObj.toLocaleDateString('en-US', { 
       weekday: 'short', 
       month: 'short', 
       day: 'numeric' 
@@ -149,9 +255,37 @@ export default function EventSchedule({
 
   return (
     <View>
-      <Text style={{ fontSize: 16, fontWeight: '600', marginBottom: 16, color: '#333' }}>
-        Proposed Travel Schedules
-      </Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <Text style={{ fontSize: 16, fontWeight: '600', color: '#333' }}>
+          Proposed Travel Schedules
+        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          {!loading && schedules.length > 0 && (
+            <Text style={{ 
+              fontSize: 12, 
+              color: cached ? '#28a745' : '#6c757d',
+              fontWeight: '500'
+            }}>
+              {cached ? '⚡ Cached' : '🔄 Generated'}
+            </Text>
+          )}
+          {eventId && !loading && (
+            <Pressable 
+              onPress={regenerateSchedules}
+              style={{ 
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                backgroundColor: '#f8f9fa',
+                borderRadius: 6,
+                borderWidth: 1,
+                borderColor: '#dee2e6'
+              }}
+            >
+              <Text style={{ fontSize: 12, color: '#495057' }}>🔄 Refresh</Text>
+            </Pressable>
+          )}
+        </View>
+      </View>
 
       {loading ? (
         <View style={{ padding: 20, alignItems: 'center' }}>
@@ -365,7 +499,7 @@ export default function EventSchedule({
                               {step.instruction}
                             </Text>
                             <Text style={{ fontSize: 11, color: '#666', marginTop: 2 }}>
-                              {step.distance} • {step.duration}
+                              {step.distance} • {step.duration} min
                             </Text>
                             {/* Transit timing information */}
                             {step.transitDetails && (
@@ -467,7 +601,7 @@ export default function EventSchedule({
                               {step.instruction}
                             </Text>
                             <Text style={{ fontSize: 11, color: '#666', marginTop: 2 }}>
-                              {step.distance} • {step.duration}
+                              {step.distance} • {step.duration} min
                             </Text>
                             {/* Transit timing information */}
                             {step.transitDetails && (

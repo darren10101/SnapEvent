@@ -245,6 +245,7 @@ export default function EventPreviewModal({
 					{/* Proposed Travel Schedules */}
 					<View style={{ marginBottom: 20 }}>
 						<EventSchedule
+							eventId={event.id}
 							invitedFriends={[
 								...(currentUser ? [{
 									id: currentUser.id,
@@ -259,6 +260,7 @@ export default function EventPreviewModal({
 							eventStart={event.start}
 							eventEnd={event.end}
 							token={token}
+							isEditing={false}
 						/>
 					</View>
 

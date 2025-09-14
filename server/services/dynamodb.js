@@ -19,7 +19,11 @@ const dynamoClient = new DynamoDBClient({
 });
 
 // Document client for easier operations
-const docClient = DynamoDBDocumentClient.from(dynamoClient);
+const docClient = DynamoDBDocumentClient.from(dynamoClient, {
+  marshallOptions: {
+    removeUndefinedValues: true,
+  },
+});
 
 class DynamoDBService {
   constructor(tableName) {

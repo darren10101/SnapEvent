@@ -501,6 +501,7 @@ export default function EventEditModal({
           {event && (
             <View style={{ marginBottom: 24 }}>
               <EventSchedule
+                eventId={event.id}
                 eventLocation={event.location}
                 eventStart={startDate.toISOString()}
                 eventEnd={endDate.toISOString()}
@@ -515,6 +516,7 @@ export default function EventEditModal({
                   ...friends.filter(friend => Array.from(invitedFriends).includes(friend.id))
                 ]}
                 token={token || undefined}
+                isEditing={true}
               />
             </View>
           )}
