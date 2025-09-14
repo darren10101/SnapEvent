@@ -194,10 +194,25 @@ export default function EventSchedule({
       const data = await response.json();
       
       if (response.ok && data.success) {
-        setSchedules(data.data || []);
+        // Convert date strings back to Date objects for consistency
+        const schedules = (data.data || []).map((schedule: any) => ({
+          ...schedule,
+          outbound: {
+            ...schedule.outbound,
+            departureTime: new Date(schedule.outbound.departureTime),
+            arrivalTime: new Date(schedule.outbound.arrivalTime)
+          },
+          return: {
+            ...schedule.return,
+            departureTime: new Date(schedule.return.departureTime),
+            arrivalTime: new Date(schedule.return.arrivalTime)
+          }
+        }));
+
+        setSchedules(schedules);
         setCached(false); // Freshly generated
-        if (data.data && data.data.length > 0 && !selectedUserId) {
-          setSelectedUserId(data.data[0].userId);
+        if (schedules.length > 0 && !selectedUserId) {
+          setSelectedUserId(schedules[0].userId);
         }
       } else {
         console.warn('Failed to regenerate travel schedules:', data.error);
